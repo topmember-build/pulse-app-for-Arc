@@ -760,8 +760,29 @@ function charge(){
 }
 function requirePay(run){
   pendingRun=run;
+  if(window.PULSE_CONFIG?.payments==='stripe'){
+    startStripeCheckout();
+    return;
+  }
   if(!acct.signedIn){openAuth('choose');return;}
   continuePending();
+}
+async function startStripeCheckout(){
+  const button=mode==='token'?$('scan'):$('scanC');
+  button.disabled=true;
+  button.textContent='Opening secure checkout…';
+  try{
+    const response=await fetch((window.PULSE_CONFIG?.apiBase||'')+'/api/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({productId:'pulse-scan'})});
+    const data=await response.json();
+    if(!response.ok||!data.url)throw new Error(data.error||'checkout_unavailable');
+    window.location.assign(data.url);
+  }catch(error){
+    console.error('[v0] Unable to start Stripe checkout',error);
+    toast('Checkout is unavailable right now. Please try again.');
+    button.disabled=false;
+    button.textContent='Scan for 0.001 USDC';
+    pendingRun=null;
+  }
 }
 function continuePending(){
   if(!pendingRun){aStep='ready';renderAuth();return;}
