@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Pulse for Arc</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="stage" role="img" aria-label="Animated map drawn as an anatomical heart with veins and arteries carrying onchain transactions"></canvas>
+
+  <header id="hud">
+    <div class="row">
+      <div>
+        <div id="tokname">ORBT</div>
+        <div class="sub" id="subline">Sample token on Arc · simulated data</div>
+      </div>
+      <div id="linked">
+        <div id="linkedNum">0.0%</div>
+        <div id="linkedLbl">held by wallets that look connected</div>
+        <div id="possNum"></div>
+      </div>
+    </div>
+    <div id="signals" aria-label="Signals found so far"></div>
+  </header>
+
+  <aside id="panel" hidden></aside>
+  <div id="key"></div>
+
+  <footer id="dock">
+    <div id="tools">
+      <button class="btn" id="play">Play</button>
+      <button class="btn" id="speed" aria-label="Playback speed">1×</button>
+      <button class="btn" id="sumbtn">Summary</button>
+      <button class="btn" id="findbtn" hidden>Findings</button>
+      <button class="btn" id="morebtn" aria-haspopup="menu" aria-expanded="false">More</button>
+      <span id="clock">Launch +0 blocks</span>
+    </div>
+    <canvas id="ecg" aria-label="Activity strip"></canvas>
+    <div id="dotnote">Drag the strip to move through time.</div>
+  </footer>
+
+  <div id="gate">
+    <div class="card">
+      <div class="gatebar"><span class="gmark"><svg width="30" height="16" viewBox="0 0 30 16" aria-hidden="true"><polyline points="0,9 8,9 10,6 13,14 16,1 19,11 21,9 30,9" fill="none" stroke="#ff5a45" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>Pulse</span><button class="btn small" id="gateAcct">Connect</button></div>
+      <h1>Scan anything on Arc</h1>
+      <p>Replay a token's first blocks to see which wallets move together, or scan a smart contract before you interact with it.</p>
+      <div class="seg" role="tablist" aria-label="Scan type">
+        <button role="tab" id="tabT" aria-selected="true">Token</button>
+        <button role="tab" id="tabC" aria-selected="false">Contract</button>
+      </div>
+      <div id="paneT">
+        <label for="addr">Token address</label>
+        <input id="addr" value="0x5a1f…c9e2 (sample token)" readonly>
+        <button class="btn primary full" id="scan">Scan for 0.001 USDC</button>
+      </div>
+      <div id="paneC" hidden>
+        <label>Pick a sample contract</label>
+        <div id="samples"></div>
+        <button class="btn primary full" id="scanC">Scan for 0.001 USDC</button>
+      </div>
+      <small>Prototype. Arc data and findings are simulated and the payment is mocked. Nothing is sent onchain.</small>
+    </div>
+  </div>
+
+
+  <div id="more" role="menu" hidden>
+    <button role="menuitem" id="keybtn">Key</button>
+    <button role="menuitem" id="tourbtn">Replay the tour</button>
+    <button role="menuitem" id="acctbtn">Account</button>
+    <button role="menuitem" id="aboutbtn">About Pulse</button>
+    <button role="menuitem" id="newscan">New scan</button>
+  </div>
+
+  <div id="simple" role="dialog" aria-modal="true" aria-labelledby="sAct" hidden>
+    <div class="scard">
+      <div class="sact" id="sAct"></div>
+      <p class="shead" id="sHead"></p>
+      <h3 id="sWhyT"></h3>
+      <ul id="sWhy"></ul>
+      <div class="sbtns"><button class="btn primary" id="sShow">Show me why</button><button class="btn" id="sAll">See the details</button></div>
+      <p class="snote" id="sNote"></p>
+    </div>
+  </div>
+
+  <div id="tour" role="dialog" aria-label="Guided tour" hidden>
+    <p id="tText"></p>
+    <div class="trow"><span id="tStep"></span><button class="btn" id="tSkip">Skip</button><button class="btn" id="tBack">Back</button><button class="btn primary" id="tNext">Next</button></div>
+  </div>
+  <div id="gloss" role="tooltip" hidden></div>
+
+<div id="landing">
+  <nav class="L-nav" aria-label="Pulse">
+    <div class="L-mark"><svg width="30" height="16" viewBox="0 0 30 16" aria-hidden="true"><polyline points="0,9 8,9 10,6 13,14 16,1 19,11 21,9 30,9" fill="none" stroke="#ff5a45" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg><span>Pulse</span><small>for Arc</small></div>
+    <button class="L-btn small" data-go="scan">Try the scanner</button>
+  </nav>
+
+  <header class="L-hero">
+    <div class="L-copy">
+      <h1>Check a token or contract on Arc before you trust it.</h1>
+      <p class="L-lead">Pulse draws Arc's activity as a living heart. Blue veins bring money in, red arteries carry it out, and amber means look twice. You get the answer in plain words first, and the proof when you want it.</p>
+      <div class="L-cta">
+        <button class="L-btn" data-go="scan">Try a sample scan</button>
+        <button class="L-btn ghost" data-go="#L-anatomy">See how to read it</button>
+      </div>
+      <p class="L-fine">Prototype. Every result you see is simulated and payments are mocked.</p>
+    </div>
+    <div class="L-art"><canvas id="L-hero" aria-label="A beating anatomical heart with a blue vein bringing money in and a red artery taking it out"></canvas></div>
+  </header>
+
+  <section class="L-sec rv" id="L-problem">
+    <h2>Block explorers show you everything. Scams count on you not reading it.</h2>
+    <ol class="L-rows">
+      <li><span class="n">1</span><div><h3>You can buy it, but you cannot sell it.</h3></div><p>Some tokens let anyone buy and quietly block almost every sale. On a normal explorer that looks like a healthy token with plenty of buyers.</p></li>
+      <li><span class="n">2</span><div><h3>One person, dressed as fifty.</h3></div><p>A single wallet can fund dozens of fresh ones and buy through all of them, so a token looks popular when it is not.</p></li>
+      <li><span class="n">3</span><div><h3>A rulebook one person can rewrite.</h3></div><p>Some contracts let their owner print new tokens, change fees, or swap the code after you have deposited. A list of transactions never tells you that.</p></li>
+    </ol>
+    <p class="L-after">Pulse reads those patterns for you and says what they mean in everyday words.</p>
+  </section>
+
+  <section class="L-sec rv" id="L-anatomy">
+    <h2>Learn to read the heart in thirty seconds.</h2>
+    <p class="L-sub">Tap a part to see what it stands for.</p>
+    <div class="L-anat">
+      <div class="L-anatcanvas"><canvas id="L-anat" aria-label="Annotated diagram of the heart with six numbered parts"></canvas></div>
+      <ol class="L-parts" id="L-parts"></ol>
+    </div>
+  </section>
+
+  <section class="L-sec rv" id="L-steps">
+    <h2>Three steps, no expertise needed.</h2>
+    <div class="L-steps">
+      <div><span class="n">1</span><h3>Paste an address</h3><p>A token or a contract on Arc. Sign in with a wallet or your email, add a small USDC balance once, and each scan costs a fraction of a cent.</p></div>
+      <div><span class="n">2</span><h3>Read the verdict</h3><p>One sentence and the top three reasons, in everyday words. Unfamiliar terms explain themselves when you tap them.</p></div>
+      <div><span class="n">3</span><h3>Open the heart for proof</h3><p>Every finding points to its evidence: which wallets, which function, which blocks.</p></div>
+    </div>
+    <div class="L-scan">
+      <div><h4>Tokens</h4><p>See which wallets move together and whether early holders cashed out.</p></div>
+      <div><h4>Contracts</h4><p>Find out who controls it, what they can do, and whether selling actually works.</p></div>
+      <div><h4>Wallets <em>planned</em></h4><p>Whales, the most active wallets and unusual behavior, on the same heart.</p></div>
+    </div>
+  </section>
+
+  <section class="L-sec rv" id="L-result">
+    <h2>What a result looks like.</h2>
+    <p class="L-sub">Three sample contracts. Pick one.</p>
+    <div class="L-tabs" role="tablist" id="L-tabs"></div>
+    <div class="L-verdict" id="L-verdict" aria-live="polite"></div>
+  </section>
+
+  <section class="L-sec rv" id="L-price">
+    <div class="L-pricegrid">
+      <div>
+        <h2>Pay for the scan, not a subscription.</h2>
+        <p class="L-sub">The plan is a charge of about a tenth of a cent for each scan, paid from a small USDC balance, with no monthly plan.</p>
+      </div>
+      <div class="L-price"><span class="amt">0.001</span><span class="unit">USDC per scan</span><span class="tag">planned price</span></div>
+    </div>
+    <ul class="L-list">
+      <li>Built for Arc, where fees are paid in USDC and sub-cent payments are practical.</li>
+      <li>Connect a wallet you already use, or continue with email and a wallet is created for you through Circle. Either way you pay from a small USDC balance.</li>
+      <li>Add a small balance once. After that each scan is a signed message with no network fee, and you can approve a pack of scans so you are not asked every time.</li>
+      <li>Planned: the same scan as an API, so apps and AI agents can check a contract before they trust it.</li>
+    </ul>
+  </section>
+
+  <section class="L-sec rv" id="L-limits">
+    <h2>What Pulse cannot promise.</h2>
+    <ul class="L-list">
+      <li><strong>It cannot prove anything is safe.</strong> A clean result means we found no red flags, not that none exist.</li>
+      <li><strong>Wallet links are educated guesses.</strong> They come from patterns, so they show how sure we are and why.</li>
+      <li><strong>This is not financial advice.</strong> Never put in money you cannot afford to lose.</li>
+      <li><strong>Today's data is simulated.</strong> The live Arc connection is the next thing to build.</li>
+    </ul>
+  </section>
+
+  <section class="L-sec rv" id="L-faq">
+    <h2>Questions people ask.</h2>
+    <details><summary>Why a heart?</summary><p>On Arc, a token's money sits in a pool that every buy and sell passes through, much like blood through a heart. Showing it that way means the picture and the data are the same thing: it beats once per block, money in is blue and money out is red.</p></details>
+    <details><summary>How do I pay, and does Pulse hold my money?</summary><p>Scanning is a payment, so you sign in first. You can connect a wallet you already have, or continue with email and a wallet is created for you through Circle. You deposit a small USDC balance once, and each scan takes 0.001 from it. With your own wallet your keys stay with you and you approve scans yourself. An email wallet is meant for scan credit rather than savings, so keep the balance small. Pulse never asks for a seed phrase, and looking at results moves no money.</p></details>
+    <details><summary>Which chain does it support?</summary><p>Arc only. Staying on one chain lets us label Arc's contracts and launchpads properly instead of guessing.</p></details>
+    <details><summary>Is this finished?</summary><p>No. It is a working prototype with simulated data, built to test whether the idea is clear to people who are new to crypto.</p></details>
+  </section>
+
+  <section class="L-final rv">
+    <h2>See it beat.</h2>
+    <button class="L-btn" data-go="scan">Try a sample scan</button>
+    <p class="L-fine">Prototype · simulated data · not financial advice</p>
+  </section>
+</div>
+
+  <div id="auth" class="modal" hidden><div class="msheet" role="dialog" aria-modal="true" aria-labelledby="aT"><button id="ax" aria-label="Close">×</button><div id="aBody"></div></div></div>
+
+  <div id="tip"></div>
+  <div id="toast"></div>
+</div>
+
+<script src="/pulse/js/config.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/contracts.js"></script>
+<script src="js/heart.js"></script>
+<script src="js/app.js"></script>
+<script src="js/landing.js"></script>
+</body>
+</html>
