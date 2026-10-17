@@ -1,1 +1,1 @@
-window.PULSE_CONFIG = { apiBase: "", payments: "stripe" };
+window.PULSE_CONFIG = { apiBase: "", payments: "onchain" };

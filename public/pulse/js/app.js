@@ -740,7 +740,7 @@ function setModeUI(){
   renderKey();
 }
 
-/* ---------- account: sign in, balance and payment (all simulated in this prototype) ---------- */
+/* ---------- account: wallet sign-in and pay-per-call flow ---------- */
 const COST=.001;
 const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const blankAcct=()=>({signedIn:false,method:null,addr:'',email:'',balance:0,pack:0});
@@ -760,29 +760,8 @@ function charge(){
 }
 function requirePay(run){
   pendingRun=run;
-  if(window.PULSE_CONFIG?.payments==='stripe'){
-    startStripeCheckout();
-    return;
-  }
   if(!acct.signedIn){openAuth('choose');return;}
   continuePending();
-}
-async function startStripeCheckout(){
-  const button=mode==='token'?$('scan'):$('scanC');
-  button.disabled=true;
-  button.textContent='Opening secure checkout…';
-  try{
-    const response=await fetch((window.PULSE_CONFIG?.apiBase||'')+'/api/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({productId:'pulse-scan'})});
-    const data=await response.json();
-    if(!response.ok||!data.url)throw new Error(data.error||'checkout_unavailable');
-    window.location.assign(data.url);
-  }catch(error){
-    console.error('[v0] Unable to start Stripe checkout',error);
-    toast('Checkout is unavailable right now. Please try again.');
-    button.disabled=false;
-    button.textContent='Scan for 0.001 USDC';
-    pendingRun=null;
-  }
 }
 function continuePending(){
   if(!pendingRun){aStep='ready';renderAuth();return;}
@@ -796,7 +775,7 @@ function afterSignIn(){
   aStep=acct.balance>=COST?'ready':'fund';renderAuth();
 }
 function renderAuth(){
-  const b=$('aBody'),fine='<p class="fine">Prototype: nothing here is real. Sign-in, wallets, balances and payments are simulated.</p>';
+  const b=$('aBody'),fine='<p class="fine">Wallet connection and onchain settlement are next. This preview uses simulated balances.</p>';
   const left=Math.floor(acct.balance/COST+1e-9);
   if(aStep==='choose'){
     b.innerHTML='<h2 id="aT">Sign in to scan</h2><p>A scan costs 0.001 USDC, paid from a small balance on Arc. Looking at results costs nothing.</p>'+
