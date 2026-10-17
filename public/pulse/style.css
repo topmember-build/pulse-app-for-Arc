@@ -1,14 +1,21 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
 :root{
-  --ink:#140a13;--bone:#eadfce;--mute:rgba(234,223,206,.62);--line:rgba(234,223,206,.16);
-  --art:#ff5a45;--ven:#4fb5e6;--amber:#f5b83d;--card:rgba(24,12,22,.9);
-  --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
-  --sans:"Avenir Next","Segoe UI",system-ui,-apple-system,sans-serif;
+  --ink:#0b0a0f;--bone:#f2eee8;--mute:rgba(242,238,232,.62);--line:rgba(242,238,232,.15);
+  --art:#ff684f;--ven:#54c7ed;--amber:#f4bd55;--card:rgba(20,17,25,.9);
+  --serif:"Space Grotesk","Avenir Next","Segoe UI",system-ui,sans-serif;
+  --sans:"Space Grotesk","Avenir Next","Segoe UI",system-ui,sans-serif;
+  --mono:"DM Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{margin:0;height:100%;background:var(--ink);color:var(--bone);font-family:var(--sans);overflow:hidden;-webkit-tap-highlight-color:transparent}
-#app{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 46%,#2a1220 0%,#170a14 52%,#0d060c 100%)}
+#app{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 46%,#261525 0%,#15111d 52%,#09090d 100%)}
+#app::after{content:"";position:absolute;inset:0;pointer-events:none;opacity:.16;background:linear-gradient(transparent 50%,rgba(255,255,255,.025) 50%);background-size:100% 4px;mix-blend-mode:screen}
 canvas{display:block}
+button,.L-btn,.L-tab,.L-part,.chip,.sample,.opt{transition:transform .2s ease,background-color .2s ease,border-color .2s ease,color .2s ease,box-shadow .2s ease}
+button:hover:not(:disabled),.L-btn:hover,.L-tab:hover,.L-part:hover,.chip:hover,.sample:hover,.opt:hover{transform:translateY(-2px)}
+.btn.primary:hover,.L-btn:not(.ghost):hover{box-shadow:0 8px 24px rgba(255,104,79,.2)}
 #stage{position:absolute;inset:0;width:100%;height:100%;touch-action:manipulation}
 button{font-family:var(--sans)}
 .btn{border:1px solid var(--line);background:rgba(234,223,206,.05);color:var(--bone);border-radius:8px;padding:0 14px;min-height:40px;font-size:14px;cursor:pointer}
@@ -174,8 +181,11 @@ button{font-family:var(--sans)}
 .L-lead{margin-top:20px;font-size:clamp(16px,1.6vw,19px);line-height:1.6;color:rgba(234,223,206,.86);max-width:34em}
 .L-cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:28px}
 .L-fine{margin-top:16px;font-size:12.5px;color:var(--mute)}
-.L-art{position:relative;aspect-ratio:1/1;width:100%;max-width:620px;justify-self:center}
-.L-art canvas,.L-anatcanvas canvas{display:block;width:100%;height:100%}
+.L-art{position:relative;aspect-ratio:1/1;width:100%;max-width:620px;justify-self:center;animation:artFloat 7s ease-in-out infinite}
+.L-art::before{content:"";position:absolute;inset:14%;border:1px solid rgba(84,199,237,.16);border-radius:50%;box-shadow:0 0 70px rgba(84,199,237,.08);animation:orbitPulse 4s ease-in-out infinite;pointer-events:none}
+.L-art canvas,.L-anatcanvas canvas{display:block;width:100%;height:100%;position:relative}
+@keyframes artFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes orbitPulse{0%,100%{transform:scale(.96);opacity:.5}50%{transform:scale(1.04);opacity:1}}
 .L-sec{max-width:1040px;margin:0 auto;padding:clamp(48px,8vw,96px) clamp(16px,4vw,48px);border-top:1px solid var(--line)}
 .L-sec h2,.L-final h2{font-size:clamp(28px,4vw,46px);line-height:1.1;max-width:20em}
 .L-sub{margin-top:12px;color:var(--mute);font-size:16px;line-height:1.5}
