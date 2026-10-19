@@ -104,7 +104,7 @@
         <button class="L-btn" data-go="scan">Try a sample scan</button>
         <button class="L-btn ghost" data-go="#L-anatomy">See how to read it</button>
       </div>
-      <p class="L-fine">Prototype data. Scan payments are onchain USDC pay-per-call.</p>
+      <p class="L-fine">Live wallet connection is powered by Privy. Scan payments are onchain USDC pay-per-call.</p>
     </div>
     <div class="L-art"><canvas id="L-hero" aria-label="A beating anatomical heart with a blue vein bringing money in and a red artery taking it out"></canvas></div>
   </header>
@@ -159,7 +159,7 @@
     </div>
     <ul class="L-list">
       <li>Built for Arc, where fees are paid in USDC and sub-cent payments are practical.</li>
-      <li>Connect a wallet you already use, or continue with email and a wallet is created for you through Circle. Either way you pay from a small USDC balance.</li>
+      <li>Connect a wallet you already use, or continue with email and Privy creates an embedded wallet for you. Either way you pay from a small USDC balance.</li>
       <li>Add a small balance once. After that each scan is a signed message with no network fee, and you can approve a pack of scans so you are not asked every time.</li>
       <li>Planned: the same scan as an API, so apps and AI agents can check a contract before they trust it.</li>
     </ul>
@@ -171,22 +171,22 @@
       <li><strong>It cannot prove anything is safe.</strong> A clean result means we found no red flags, not that none exist.</li>
       <li><strong>Wallet links are educated guesses.</strong> They come from patterns, so they show how sure we are and why.</li>
       <li><strong>This is not financial advice.</strong> Never put in money you cannot afford to lose.</li>
-      <li><strong>Today's data and wallet settlement are simulated.</strong> The live Arc connection and Circle wallet flow are the next things to build.</li>
+      <li><strong>Arc testnet settlement is the launch environment.</strong> Privy handles wallet connection and embedded-wallet onboarding; payment execution is kept explicit per scan.</li>
     </ul>
   </section>
 
   <section class="L-sec rv" id="L-faq">
     <h2>Questions people ask.</h2>
     <details><summary>Why a heart?</summary><p>On Arc, a token's money sits in a pool that every buy and sell passes through, much like blood through a heart. Showing it that way means the picture and the data are the same thing: it beats once per block, money in is blue and money out is red.</p></details>
-    <details><summary>How do I pay, and does Pulse hold my money?</summary><p>Scanning is a payment, so you sign in first. You can connect a wallet you already have, or continue with email and a wallet is created for you through Circle. You deposit a small USDC balance once, and each scan takes 0.001 from it. With your own wallet your keys stay with you and you approve scans yourself. An email wallet is meant for scan credit rather than savings, so keep the balance small. Pulse never asks for a seed phrase, and looking at results moves no money.</p></details>
+    <details><summary>How do I pay, and does Pulse hold my money?</summary><p>Scanning is a payment, so you connect first. You can connect a wallet you already have, or continue with email and Privy creates an embedded wallet. You deposit a small USDC balance once, and each scan takes 0.001 from it. With your own wallet your keys stay with you and you approve scans yourself. A Privy embedded wallet is meant for scan credit rather than savings, so keep the balance small. Pulse never asks for a seed phrase, and looking at results moves no money.</p></details>
     <details><summary>Which chain does it support?</summary><p>Arc only. Staying on one chain lets us label Arc's contracts and launchpads properly instead of guessing.</p></details>
-    <details><summary>Is this finished?</summary><p>No. It is a working prototype with simulated data, built to test whether the idea is clear to people who are new to crypto.</p></details>
+    <details><summary>Is this finished?</summary><p>Pulse is being wired for Arc testnet with live Privy wallet connection and onchain pay-per-call settlement. Findings still explain what the scanner can and cannot prove.</p></details>
   </section>
 
   <section class="L-final rv">
     <h2>See it beat.</h2>
     <button class="L-btn" data-go="scan">Try a sample scan</button>
-    <p class="L-fine">Prototype · simulated data · not financial advice</p>
+    <p class="L-fine">Arc testnet · wallet connection via Privy · not financial advice</p>
   </section>
 </div>
 

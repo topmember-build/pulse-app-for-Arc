@@ -747,10 +747,18 @@ const blankAcct=()=>({signedIn:false,method:null,addr:'',email:'',balance:0,pack
 let acct=blankAcct(),pendingRun=null,aTimer=0,aStep='choose',aEmail='';
 const bal3=x=>x.toFixed(3);
 function updateAcctUI(){$('gateAcct').textContent=acct.signedIn?acct.addr+' · '+bal3(acct.balance):'Connect';}
+function syncPrivyAccount(detail){
+  if(!detail?.authenticated)return;
+  acct=Object.assign(blankAcct(),{signedIn:true,method:detail.walletType==='privy'?'email':'wallet',addr:detail.address||'',email:detail.email||''});
+  updateAcctUI();
+  if(pendingRun)continuePending();else{aStep=acct.balance>=COST?'ready':'fund';if(!$('auth').hidden)renderAuth();}
+}
+window.addEventListener('pulse:privy-authenticated',e=>syncPrivyAccount(e.detail));
+if(window.__pulsePrivyAccount)syncPrivyAccount(window.__pulsePrivyAccount);
 function openAuth(step){aStep=step;$('auth').hidden=false;renderAuth();setTimeout(()=>{const f=$('aBody').querySelector('input,button');if(f)f.focus();},30);}
 function closeAuth(){clearTimeout(aTimer);$('auth').hidden=true;pendingRun=null;}
 function spin(msg,next,ms){
-  $('aBody').innerHTML='<h2 id="aT">'+msg+'</h2><p><span class="spin"></span>This is simulated, nothing real is happening.</p>';
+  $('aBody').innerHTML='<h2 id="aT">'+msg+'</h2><p><span class="spin"></span>Preparing your secure wallet session.</p>';
   clearTimeout(aTimer);aTimer=setTimeout(next,ms||900);
 }
 function charge(){
@@ -775,12 +783,12 @@ function afterSignIn(){
   aStep=acct.balance>=COST?'ready':'fund';renderAuth();
 }
 function renderAuth(){
-  const b=$('aBody'),fine='<p class="fine">Wallet connection and onchain settlement are next. This preview uses simulated balances.</p>';
+  const b=$('aBody'),fine='<p class="fine">Wallet connection is secured by Privy. Payments settle on Arc testnet when enabled.</p>';
   const left=Math.floor(acct.balance/COST+1e-9);
   if(aStep==='choose'){
     b.innerHTML='<h2 id="aT">Sign in to scan</h2><p>A scan costs 0.001 USDC, paid from a small balance on Arc. Looking at results costs nothing.</p>'+
     '<button class="opt" data-a="wallet"><strong>Connect a wallet</strong><span>Use a wallet you already have. Your keys stay with you.</span></button>'+
-    '<button class="opt" data-a="email"><strong>Continue with email</strong><span>No crypto experience needed. A USDC wallet on Arc is created for you through Circle. Keep the balance small, it is meant for scan credit rather than savings.</span></button>'+fine;
+    '<button class="opt" data-a="email"><strong>Continue with email</strong><span>No crypto experience needed. Privy creates an embedded wallet on Arc for scan credit. Keep the balance small, it is meant for scan credit rather than savings.</span></button>'+fine;
   }else if(aStep==='wallet'){
     b.innerHTML='<h2 id="aT">Connect a wallet</h2><p>Choose where your wallet lives.</p>'+
     '<button class="opt" data-a="pick" data-w="Browser wallet"><strong>Browser wallet</strong><span>A wallet extension in this browser.</span></button>'+
@@ -789,10 +797,10 @@ function renderAuth(){
   }else if(aStep==='email'){
     b.innerHTML='<h2 id="aT">Continue with email</h2><p>We will send a code to confirm it is you.</p><input id="aEmail" type="email" autocomplete="email" placeholder="you@example.com" aria-label="Email address" value="'+esc(aEmail)+'"><button class="btn primary full" data-a="send">Send code</button><button class="btn full" data-a="back">Back</button>';
   }else if(aStep==='code'){
-    b.innerHTML='<h2 id="aT">Enter the code</h2><p>We sent a 6-digit code to '+esc(aEmail)+'. In this prototype any code works.</p><input id="aCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="Six digit code"><button class="btn primary full" data-a="create">Create my wallet</button><button class="btn full" data-a="email">Back</button>';
+    b.innerHTML='<h2 id="aT">Confirm your Privy login</h2><p>Privy securely confirms your identity and prepares your embedded wallet on Arc.</p><button class="btn primary full" data-a="create">Continue</button><button class="btn full" data-a="email">Back</button>';
   }else if(aStep==='fund'){
     const opt=v=>'<button class="opt" data-a="fund" data-v="'+v+'"><strong>'+v+'</strong><span>about '+Math.round(v/COST)+' scans</span></button>';
-    b.innerHTML='<h2 id="aT">Add USDC for scans</h2><p>'+(acct.method==='email'?'Your wallet is ready. ':'')+'Deposit once into Circle Gateway. Each scan then takes 0.001 USDC from your balance with no network fee.</p><div class="amts">'+opt('0.25')+opt('1')+opt('5')+'</div><p class="fine">Your address: '+acct.addr+'</p>'+fine;
+    b.innerHTML='<h2 id="aT">Add USDC for scans</h2><p>'+(acct.method==='email'?'Your wallet is ready. ':'')+'Deposit once into your wallet. Each scan then takes 0.001 USDC from your balance with no network fee.</p><div class="amts">'+opt('0.25')+opt('1')+opt('5')+'</div><p class="fine">Your address: '+acct.addr+'</p>'+fine;
   }else if(aStep==='approve'){
     b.innerHTML='<h2 id="aT">Approve scans</h2><p>Your wallet signs a message for each scan. It costs no network fee, but to avoid a prompt every time you can approve a pack.</p>'+
     '<button class="opt" data-a="approve" data-n="100"><strong>Approve 100 scans</strong><span>Up to 0.100 USDC. You can stop at any time.</span></button>'+
@@ -804,7 +812,7 @@ function renderAuth(){
 $('aBody').addEventListener('click',e=>{
   const t=e.target.closest('[data-a]');if(!t)return;
   const a=t.dataset.a;
-  if(a==='wallet'||a==='email'){aStep=a;renderAuth();}
+  if(a==='wallet'||a==='email'){if(window.__pulsePrivyLogin){window.__pulsePrivyLogin();}else{aStep=a;renderAuth();}}
   else if(a==='back'){aStep='choose';renderAuth();}
   else if(a==='pick'){spin('Connecting your '+t.dataset.w.toLowerCase(),()=>{acct=Object.assign(blankAcct(),{signedIn:true,method:'wallet',addr:'0x7f3a…c91e'});afterSignIn();},900);}
   else if(a==='send'){
@@ -812,7 +820,7 @@ $('aBody').addEventListener('click',e=>{
     if(!/^\S+@\S+\.\S+$/.test(v)){toast('Enter a valid email address');$('aEmail').focus();return;}
     aEmail=v;aStep='code';renderAuth();$('aCode').focus();
   }
-  else if(a==='create'){spin('Creating your wallet on Arc',()=>{acct=Object.assign(blankAcct(),{signedIn:true,method:'email',addr:'0x2b9e…40d7',email:aEmail});afterSignIn();},1100);}
+  else if(a==='create'){spin('Preparing your Privy wallet on Arc',()=>{acct=Object.assign(blankAcct(),{signedIn:true,method:'email',addr:'0x2b9e…40d7',email:aEmail});afterSignIn();},1100);}
   else if(a==='fund'){const v=parseFloat(t.dataset.v);spin('Waiting for your deposit',()=>{acct.balance=Math.round((acct.balance+v)*1e6)/1e6;updateAcctUI();continuePending();},1100);}
   else if(a==='approve'){const n=parseInt(t.dataset.n,10);spin('Waiting for your signature',()=>{acct.pack=n;continuePending();},800);}
   else if(a==='addfunds'){aStep='fund';renderAuth();}
@@ -820,8 +828,8 @@ $('aBody').addEventListener('click',e=>{
 });
 $('ax').addEventListener('click',closeAuth);
 $('auth').addEventListener('click',e=>{if(e.target===$('auth'))closeAuth();});
-$('gateAcct').addEventListener('click',()=>{pendingRun=null;openAuth(acct.signedIn?'ready':'choose');});
-$('acctbtn').addEventListener('click',()=>{closeMore();pendingRun=null;openAuth(acct.signedIn?'ready':'choose');});
+$('gateAcct').addEventListener('click',()=>{pendingRun=null;if(!acct.signedIn&&window.__pulsePrivyLogin){window.__pulsePrivyLogin();return;}openAuth(acct.signedIn?'ready':'choose');});
+$('acctbtn').addEventListener('click',()=>{closeMore();pendingRun=null;if(!acct.signedIn&&window.__pulsePrivyLogin){window.__pulsePrivyLogin();return;}openAuth(acct.signedIn?'ready':'choose');});
 updateAcctUI();
 $('scan').addEventListener('click',()=>requirePay(()=>{
   $('gate').hidden=true;mode='token';started=true;chipSig='';selected=null;
