@@ -43,7 +43,7 @@ export function PrivyAppProvider({ children }: { children: React.ReactNode }) {
       appId={appId}
       config={{
         loginMethods: ['email', 'wallet'],
-        embeddedWallets: { createOnLogin: 'all-users' },
+        embeddedWallets: { ethereum: { createOnLogin: 'all-users' } },
         appearance: {
           theme: 'dark',
           accentColor: '#ff5a45',
