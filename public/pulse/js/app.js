@@ -260,7 +260,7 @@ function renderPanelC(){
   }else{
     const v=verdictOf(cScore);
     const sorted=C.findings.map((f,i)=>({f,i})).sort((a,b)=>SEV_ORDER[a.f.sev]-SEV_ORDER[b.f.sev]);
-    h+=`<h2>${C.name}</h2><p class="kind">${C.kind} · ${C.addr}</p><div class="verdict" style="color:${v.color}">${v.action}</div><p class="kind" style="margin-bottom:6px">${T(C.headline)}</p><h3>Everything we found</h3><ul>${sorted.map(x=>`<li class="fl"><button class="fb" data-fi="${x.i}" aria-label="Show this on the map: ${x.f.short}"><span class="sev ${x.f.sev}">${SEV_LABEL[x.f.sev]}</span><span><strong>${T(x.f.plain)}</strong></span></button><details><summary>Technical detail</summary><div><strong>${x.f.title}.</strong> ${T(x.f.detail)}<br><code>${x.f.where}</code></div></details></li>`).join('')}</ul><p class="note">The score combines the findings above. This is simulated sample data. A real scan reads the bytecode and storage, checks the source, and simulates buys and sells, but it can still miss things.</p>`;
+    h+=`<h2>${C.name}</h2><p class="kind">${C.kind} · ${C.addr}</p><div class="verdict" style="color:${v.color}">${v.action}</div><p class="kind" style="margin-bottom:6px">${T(C.headline)}</p><h3>Everything we found</h3><ul>${sorted.map(x=>`<li class="fl"><button class="fb" data-fi="${x.i}" aria-label="Show this on the map: ${x.f.short}"><span class="sev ${x.f.sev}">${SEV_LABEL[x.f.sev]}</span><span><strong>${T(x.f.plain)}</strong></span></button><details><summary>Technical detail</summary><div><strong>${x.f.title}.</strong> ${T(x.f.detail)}<br><code>${x.f.where}</code></div></details></li>`).join('')}</ul><p class="note">The score combines live RPC findings. This first pass confirms deployment and runtime bytecode; deeper ownership, storage, source verification, and sell simulation are separate checks.</p>`;
   }
   setPanel(h);
 }
@@ -736,7 +736,7 @@ function setModeUI(){
   $('play').hidden=!t;$('speed').hidden=!t;$('findbtn').hidden=t;
   ecg.style.cursor=t?'ew-resize':'default';
   $('tokname').textContent=t?'ORBT':C.name;
-  $('subline').textContent=t?'Sample token on Arc · simulated data':`Sample contract on Arc · ${C.addr} · simulated`;
+  $('subline').textContent=t?'Token replay · sample visualization':`Live Arc testnet contract · ${C.addr}`;
   renderKey();
 }
 
@@ -837,12 +837,18 @@ $('scan').addEventListener('click',()=>requirePay(()=>{
   summaryAuto=false;seek(0);
   if(!tourSeen.token)startTour();else play();
 }));
-$('scanC').addEventListener('click',()=>requirePay(()=>{
-  $('gate').hidden=true;mode='contract';started=true;pause();chipSig='';
-  setupContract(CONTRACTS.find(c=>c.id===sampleId));
-  cPanelOpen=!mobile;selected=null;
-  setModeUI();
-  hidePanel();updateAll();cPanelOpen=false;openSimple();
+$('scanC').addEventListener('click',()=>requirePay(async()=>{
+  const input=$('contractAddr'), address=(input.value||'').trim();
+  if(!/^0x[0-9a-fA-F]{40}$/.test(address)){toast('Enter a valid Arc contract address');return;}
+  $('scanC').disabled=true;
+  try{
+    const response=await fetch('/api/scan/contract',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({address})});
+    const live=await response.json();
+    if(!response.ok)throw new Error(live.error||'Live scan failed');
+    $('gate').hidden=true;mode='contract';started=true;pause();chipSig='';
+    setupContract(live);cPanelOpen=!mobile;selected=null;setModeUI();hidePanel();updateAll();cPanelOpen=false;openSimple();
+  }catch(error){toast(error.message||'Unable to reach Arc testnet');}
+  finally{$('scanC').disabled=false;}
 }));
 function renderKey(){
   const sw=(bg,border)=>`<span class="sw" style="${bg?'background:'+bg:''}${border?';border:1.5px '+border:''}"></span>`;

@@ -8,6 +8,17 @@ function PulseWalletBridge() {
   const { wallets } = useWallets()
 
   useEffect(() => {
+    const wallet = wallets.find((item) => item.walletClientType === 'privy') ?? wallets[0]
+    window.__pulsePrivySendUsdc = async (to, amount) => {
+      if (!wallet) throw new Error('Connect a wallet first')
+      const provider = await wallet.getEthereumProvider()
+      const value = BigInt(Math.round(amount * 1e6)).toString(16).padStart(64, '0')
+      return provider.request({ method: 'eth_sendTransaction', params: [{ from: wallet.address, to, value: `0x${value}` }] }) as Promise<string>
+    }
+    return () => { delete window.__pulsePrivySendUsdc }
+  }, [wallets])
+
+  useEffect(() => {
     if (!ready) return
 
     window.__pulsePrivyLogin = login
@@ -62,6 +73,7 @@ declare global {
   interface Window {
     __pulsePrivyLogin?: () => void
     __pulsePrivyLogout?: () => void
+    __pulsePrivySendUsdc?: (to: string, amount: number) => Promise<string>
     __pulsePrivyAccount?: {
       authenticated: boolean
       email?: string

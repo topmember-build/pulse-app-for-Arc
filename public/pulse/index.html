@@ -56,11 +56,13 @@
         <button class="btn primary full" id="scan">Scan for 0.001 USDC</button>
       </div>
       <div id="paneC" hidden>
-        <label>Pick a sample contract</label>
+        <label for="contractAddr">Contract address</label>
+        <input id="contractAddr" placeholder="0x…" inputmode="text" autocomplete="off">
+        <label>Or pick a sample contract</label>
         <div id="samples"></div>
-        <button class="btn primary full" id="scanC">Scan for 0.001 USDC</button>
+        <button class="btn primary full" id="scanC">Scan live contract</button>
       </div>
-      <small>Arc data and findings are simulated. Payments are designed for onchain USDC pay-per-call.</small>
+      <small>Contract scans read live Arc testnet RPC data. Payment settlement is enabled after the wallet and payment contract are configured.</small>
     </div>
   </div>
 
