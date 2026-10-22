@@ -754,6 +754,7 @@ function syncPrivyAccount(detail){
   if(pendingRun)continuePending();else{aStep=acct.balance>=COST?'ready':'fund';if(!$('auth').hidden)renderAuth();}
 }
 window.addEventListener('pulse:privy-authenticated',e=>syncPrivyAccount(e.detail));
+window.addEventListener('pulse:privy-signed-out',()=>{acct=blankAcct();updateAcctUI();closeAuth();});
 if(window.__pulsePrivyAccount)syncPrivyAccount(window.__pulsePrivyAccount);
 function openAuth(step){aStep=step;$('auth').hidden=false;renderAuth();setTimeout(()=>{const f=$('aBody').querySelector('input,button');if(f)f.focus();},30);}
 function closeAuth(){clearTimeout(aTimer);$('auth').hidden=true;pendingRun=null;}
@@ -787,15 +788,15 @@ function renderAuth(){
   const left=Math.floor(acct.balance/COST+1e-9);
   if(aStep==='choose'){
     b.innerHTML='<h2 id="aT">Sign in to scan</h2><p>A scan costs 0.001 USDC, paid from a small balance on Arc. Looking at results costs nothing.</p>'+
-    '<button class="opt" data-a="wallet"><strong>Connect a wallet</strong><span>Use a wallet you already have. Your keys stay with you.</span></button>'+
-    '<button class="opt" data-a="email"><strong>Continue with email</strong><span>No crypto experience needed. Privy creates an embedded wallet on Arc for scan credit. Keep the balance small, it is meant for scan credit rather than savings.</span></button>'+fine;
+    '<button class="opt" data-a="wallet"><strong>Connect a wallet with Privy</strong><span>Use a wallet you already have or choose a supported wallet in the Privy dialog.</span></button>'+
+    '<button class="opt" data-a="email"><strong>Continue with Privy email</strong><span>No crypto experience needed. Privy creates an embedded wallet for Arc testnet access.</span></button>'+fine;
   }else if(aStep==='wallet'){
     b.innerHTML='<h2 id="aT">Connect a wallet</h2><p>Choose where your wallet lives.</p>'+
-    '<button class="opt" data-a="pick" data-w="Browser wallet"><strong>Browser wallet</strong><span>A wallet extension in this browser.</span></button>'+
-    '<button class="opt" data-a="pick" data-w="Phone wallet"><strong>Phone wallet</strong><span>Scan a code with a wallet app on your phone.</span></button>'+
+    '<button class="opt" data-a="pick" data-w="Browser wallet"><strong>Browser wallet</strong><span>Choose an installed wallet from Privy.</span></button>'+
+    '<button class="opt" data-a="pick" data-w="Phone wallet"><strong>External wallet</strong><span>Connect a supported external wallet through Privy.</span></button>'+
     '<button class="btn full" data-a="back">Back</button>';
   }else if(aStep==='email'){
-    b.innerHTML='<h2 id="aT">Continue with email</h2><p>We will send a code to confirm it is you.</p><input id="aEmail" type="email" autocomplete="email" placeholder="you@example.com" aria-label="Email address" value="'+esc(aEmail)+'"><button class="btn primary full" data-a="send">Send code</button><button class="btn full" data-a="back">Back</button>';
+    b.innerHTML='<h2 id="aT">Continue with Privy</h2><p>Privy securely handles email verification and embedded wallet creation.</p><button class="btn primary full" data-a="send">Open Privy login</button><button class="btn full" data-a="back">Back</button>';
   }else if(aStep==='code'){
     b.innerHTML='<h2 id="aT">Confirm your Privy login</h2><p>Privy securely confirms your identity and prepares your embedded wallet on Arc.</p><button class="btn primary full" data-a="create">Continue</button><button class="btn full" data-a="email">Back</button>';
   }else if(aStep==='fund'){
@@ -814,17 +815,13 @@ $('aBody').addEventListener('click',e=>{
   const a=t.dataset.a;
   if(a==='wallet'||a==='email'){if(window.__pulsePrivyLogin){window.__pulsePrivyLogin();}else{aStep=a;renderAuth();}}
   else if(a==='back'){aStep='choose';renderAuth();}
-  else if(a==='pick'){spin('Connecting your '+t.dataset.w.toLowerCase(),()=>{acct=Object.assign(blankAcct(),{signedIn:true,method:'wallet',addr:'0x7f3a…c91e'});afterSignIn();},900);}
-  else if(a==='send'){
-    const v=($('aEmail').value||'').trim();
-    if(!/^\S+@\S+\.\S+$/.test(v)){toast('Enter a valid email address');$('aEmail').focus();return;}
-    aEmail=v;aStep='code';renderAuth();$('aCode').focus();
-  }
-  else if(a==='create'){spin('Preparing your Privy wallet on Arc',()=>{acct=Object.assign(blankAcct(),{signedIn:true,method:'email',addr:'0x2b9e…40d7',email:aEmail});afterSignIn();},1100);}
+  else if(a==='pick'){if(window.__pulsePrivyLogin)window.__pulsePrivyLogin();else toast('Privy wallet connection is unavailable');}
+  else if(a==='send'){if(window.__pulsePrivyLogin)window.__pulsePrivyLogin();else toast('Privy email login is unavailable');}
+  else if(a==='create'){if(window.__pulsePrivyLogin)window.__pulsePrivyLogin();else toast('Privy login is unavailable');}
   else if(a==='fund'){const v=parseFloat(t.dataset.v);spin('Waiting for your deposit',()=>{acct.balance=Math.round((acct.balance+v)*1e6)/1e6;updateAcctUI();continuePending();},1100);}
   else if(a==='approve'){const n=parseInt(t.dataset.n,10);spin('Waiting for your signature',()=>{acct.pack=n;continuePending();},800);}
   else if(a==='addfunds'){aStep='fund';renderAuth();}
-  else if(a==='signout'){acct=blankAcct();updateAcctUI();closeAuth();}
+  else if(a==='signout'){if(window.__pulsePrivyLogout)window.__pulsePrivyLogout();else{acct=blankAcct();updateAcctUI();closeAuth();}}
 });
 $('ax').addEventListener('click',closeAuth);
 $('auth').addEventListener('click',e=>{if(e.target===$('auth'))closeAuth();});
@@ -898,5 +895,5 @@ addEventListener('resize',resize);
 resize();updateAll();
 requestAnimationFrame(frame);
 // test hook
-window.__arc={signIn:(m)=>{acct=Object.assign(blankAcct(),{signedIn:true,method:m||'wallet',addr:'0x7f3a…c91e',balance:.5,pack:100});updateAcctUI();},acct:()=>acct,start:(m,id)=>{if(m==='token')$('scan').click();else{sampleId=id||sampleId;$('scanC').click();}},seek:b=>{pause();seek(b);},select:id=>{select(id);},state:()=>({mode,curB,playing})};
+window.__arc={acct:()=>acct,start:(m,id)=>{if(m==='token')$('scan').click();else{sampleId=id||sampleId;$('scanC').click();}},seek:b=>{pause();seek(b);},select:id=>{select(id);},state:()=>({mode,curB,playing})};
 })();

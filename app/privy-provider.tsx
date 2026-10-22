@@ -33,6 +33,9 @@ function PulseWalletBridge() {
         walletType: wallet?.walletClientType,
       }
       window.dispatchEvent(new CustomEvent('pulse:privy-authenticated', { detail: window.__pulsePrivyAccount }))
+    } else {
+      delete window.__pulsePrivyAccount
+      window.dispatchEvent(new CustomEvent('pulse:privy-signed-out'))
     }
 
     return () => {
