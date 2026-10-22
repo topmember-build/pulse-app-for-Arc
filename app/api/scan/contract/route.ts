@@ -1,16 +1,23 @@
 import { contractScanRequestSchema, contractScanSchema } from '@/lib/schemas'
+import { db } from '@/lib/db'
+import { sql } from 'drizzle-orm'
 
 const ARC_RPC_URL = process.env.ARC_RPC_URL ?? 'https://rpc.testnet.arc.network'
 const ARC_CHAIN_ID = 5042002
 
-async function rpc(method: string, params: unknown[]) {
+const requestCounts = new Map<string, { count: number; resetAt: number }>()
+
+async function rpc(method: string, params: unknown[], attempt = 0): Promise<string> {
   const response = await fetch(ARC_RPC_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
     cache: 'no-store',
   })
-  if (!response.ok) throw new Error(`Arc RPC returned ${response.status}`)
+  if (!response.ok) {
+    if (attempt < 2) return rpc(method, params, attempt + 1)
+    throw new Error(`Arc RPC returned ${response.status}`)
+  }
   const body = await response.json()
   if (body.error) throw new Error(body.error.message ?? 'Arc RPC error')
   return body.result as string
@@ -19,6 +26,11 @@ async function rpc(method: string, params: unknown[]) {
 export async function POST(request: Request) {
   const parsed = contractScanRequestSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return Response.json({ error: 'invalid_input' }, { status: 400 })
+  const key = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
+  const now = Date.now(), current = requestCounts.get(key)
+  if (!current || current.resetAt <= now) requestCounts.set(key, { count: 1, resetAt: now + 60_000 })
+  else if (current.count >= 20) return Response.json({ error: 'rate_limited', retryAfter: Math.ceil((current.resetAt - now) / 1000) }, { status: 429 })
+  else current.count += 1
 
   try {
     const [chainId, code, balance] = await Promise.all([
@@ -53,7 +65,12 @@ export async function POST(request: Request) {
       facts: [['Network', 'Arc testnet'], ['Runtime bytecode', `${bytecodeBytes.toLocaleString()} bytes`], ['Native balance', `${nativeBalance.toFixed(6)} ETH equivalent`]],
       powers: [], findings,
     }
-    return Response.json(contractScanSchema.parse(result), { headers: { 'cache-control': 'no-store' } })
+    const parsedResult = contractScanSchema.parse(result)
+    const wallet = request.headers.get('x-pulse-wallet')
+    if (wallet && /^0x[0-9a-fA-F]{40}$/.test(wallet)) {
+      await db.execute(sql`INSERT INTO pulse_scan_history (wallet_address, scan_type, target_address, status, summary) VALUES (${wallet}, 'contract', ${parsed.data.address}, 'complete', ${JSON.stringify({ headline: parsedResult.headline, findings: parsedResult.findings.length })}::jsonb)`)
+    }
+    return Response.json(parsedResult, { headers: { 'cache-control': 'no-store' } })
   } catch (error) {
     console.error('[pulse] Arc scan failed', error)
     return Response.json({ error: 'arc_rpc_unavailable' }, { status: 502 })

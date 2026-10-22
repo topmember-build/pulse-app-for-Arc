@@ -191,7 +191,7 @@ function updateHud(){
     $('linkedNum').textContent=cScore;$('linkedNum').style.color=v.color;
     $('linkedLbl').textContent=v.label;
     $('possNum').textContent='Risk score, 0 to 100';
-    $('clock').textContent='Live view · simulated calls';
+    $('clock').textContent='Live evidence · Arc testnet';
     $('dotnote').textContent='Each beat is a batch of calls to this contract. Amber ticks mark sells that failed.';
   }
 }
@@ -600,6 +600,7 @@ $('play').addEventListener('click',()=>{playing?pause():play();});
 $('speed').addEventListener('click',()=>{speed=speed===1?2:speed===2?4:1;$('speed').textContent=speed+'×';});
 $('keybtn').addEventListener('click',()=>{$('key').hidden=!$('key').hidden;});
 $('findbtn').addEventListener('click',()=>{cPanelOpen=!cPanelOpen;if(!cPanelOpen)selected=null;renderPanel();if(!cPanelOpen)hidePanel();});
+$('historybtn').addEventListener('click',async()=>{closeMore();if(!acct.addr){toast('Connect Privy to view scan history');return;}try{const r=await fetch('/api/history?wallet='+encodeURIComponent(acct.addr));const data=await r.json();toast(data.scans?.length?`${data.scans.length} completed scan${data.scans.length===1?'':'s'} on this wallet`:'No scans recorded yet');}catch{toast('History is temporarily unavailable');}});
 $('newscan').addEventListener('click',()=>{pause();$('gate').hidden=false;});
 function scrubTo(e){const r=ecg.getBoundingClientRect();pause();seek(Math.floor((e.clientX-r.left)/r.width*N));}
 ecg.addEventListener('pointerdown',e=>{if(!started||mode!=='token')return;scrubbing=true;ecg.setPointerCapture(e.pointerId);scrubTo(e);});
@@ -839,7 +840,7 @@ $('scanC').addEventListener('click',()=>requirePay(async()=>{
   if(!/^0x[0-9a-fA-F]{40}$/.test(address)){toast('Enter a valid Arc contract address');return;}
   $('scanC').disabled=true;
   try{
-    const response=await fetch('/api/scan/contract',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({address})});
+    const response=await fetch('/api/scan/contract',{method:'POST',headers:{'content-type':'application/json','x-pulse-wallet':acct.addr||''},body:JSON.stringify({address})});
     const live=await response.json();
     if(!response.ok)throw new Error(live.error||'Live scan failed');
     $('gate').hidden=true;mode='contract';started=true;pause();chipSig='';
