@@ -45,15 +45,15 @@
     <div class="card">
       <div class="gatebar"><span class="gmark"><svg width="30" height="16" viewBox="0 0 30 16" aria-hidden="true"><polyline points="0,9 8,9 10,6 13,14 16,1 19,11 21,9 30,9" fill="none" stroke="#ff5a45" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>Pulse</span><button class="btn small" id="gateAcct">Connect</button></div>
       <h1>Scan anything on Arc</h1>
-      <p>Replay a token's first blocks to see which wallets move together, or scan a smart contract before you interact with it.</p>
+      <p>Inspect live Arc token transfers and scan smart contracts before you interact with them.</p>
       <div class="seg" role="tablist" aria-label="Scan type">
         <button role="tab" id="tabT" aria-selected="true">Token</button>
         <button role="tab" id="tabC" aria-selected="false">Contract</button>
       </div>
       <div id="paneT">
         <label for="addr">Token address</label>
-        <input id="addr" value="0x5a1f…c9e2 (sample token)" readonly>
-        <button class="btn primary full" id="scan">Scan for 0.001 USDC</button>
+        <input id="addr" placeholder="0x…" inputmode="text" autocomplete="off">
+        <button class="btn primary full" id="scan">Scan live token</button>
       </div>
       <div id="paneC" hidden>
         <label for="contractAddr">Contract address</label>

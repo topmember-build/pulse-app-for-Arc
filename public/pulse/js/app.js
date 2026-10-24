@@ -1,9 +1,9 @@
 //#DOM_START
 (function(){
-const N=SIM.N,BLOCKS=SIM.blocks,STATES=SIM.states;
+let N=SIM.N,BLOCKS=SIM.blocks,STATES=SIM.states;
 const KINDS={F:'wallet',A:'linked',B:'linked',R:'diffuse',P:'contract',X:'contract',W:'wallet'};
 const KIND_LABEL={linked:'Wallets that behave like one group',wallet:'Single wallet',diffuse:'Many unrelated holders',contract:'Known contract, left out of linking'};
-const IDS=SIM.ids,NAMES=SIM.names;
+let IDS=SIM.ids,NAMES=SIM.names;
 const SERIF='"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif';
 const SANS='"Avenir Next","Segoe UI",system-ui,sans-serif';
 const BONE='234,223,206',ART='#ff5a45',VEN='#4fb5e6',AMBER='245,184,61',VEIN_RGB='111,150,214',ART_RGB='224,87,74';
@@ -18,7 +18,7 @@ let W=0,H=0,DPR=1,area={x:0,y:0,w:100,h:100},S=1,mobile=false,heartR=50;
 let mode='token';
 let curB=0,blockAcc=0,tail=0,playing=false,started=false,speed=1,simTime=0,realTime=0,beatAt=-10,beatAmp=.6;
 let particles=[],selected=null,flagAnim={},chipSig='',panelWas=false,tipUntil=0,scrubbing=false;
-let cur=STATES[0];
+let cur=STATES[0] || {hold:{},wallets:{},usdBuy:{},usdSell:{},edgeVol:{},last:{},flags:[],ev:{A:[],B:[]},conf:{A:0,B:0}};
 // contract mode
 let C=null,cNext=0,cBeats=[],cPanelOpen=false,cFlash=null,cScore=0,cChipRects=[];
 const cn={OWN:{},USR:{},TOP:{}};
@@ -766,12 +766,12 @@ function spin(msg,next,ms){
   $('aBody').innerHTML='<h2 id="aT">'+msg+'</h2><p><span class="spin"></span>Preparing your secure wallet session.</p>';
   clearTimeout(aTimer);aTimer=setTimeout(next,ms||900);
 }
-function charge(){
+async function charge(){
   if(!window.__pulsePrivySendUsdc) throw new Error('Wallet settlement is unavailable')
-  try { await window.__pulsePrivySendUsdc('', COST) } catch (error) { toast(error instanceof Error ? error.message : 'Payment settlement is not configured'); return }
-  acct.balance=Math.round((acct.balance-COST)*1e6)/1e6;
-  if(acct.method==='wallet')acct.pack=Math.max(0,acct.pack-1);
-  updateAcctUI();toast('Paid 0.001 USDC · balance '+bal3(acct.balance));
+  await window.__pulsePrivySendUsdc('', COST)
+  acct.balance=Math.max(0,Math.round((acct.balance-COST)*1e6)/1e6)
+  if(acct.method==='wallet')acct.pack=Math.max(0,acct.pack-1)
+  updateAcctUI();toast('Paid 0.001 USDC · balance '+bal3(acct.balance))
 }
 function requirePay(run){
   pendingRun=run;
@@ -819,11 +819,11 @@ function renderAuth(){
 $('aBody').addEventListener('click',e=>{
   const t=e.target.closest('[data-a]');if(!t)return;
   const a=t.dataset.a;
-  if(a==='wallet'||a==='email'){if(window.__pulsePrivyLogin){window.__pulsePrivyLogin();}else{aStep=a;renderAuth();}}
+  if(a==='wallet'||a==='email'){if(window.__pulsePrivyLogin)requestPrivyLogin();else{aStep=a;renderAuth();}}
   else if(a==='back'){aStep='choose';renderAuth();}
-  else if(a==='pick'){requestPrivyLogin();else toast('Privy wallet connection is unavailable');}
-  else if(a==='send'){requestPrivyLogin();else toast('Privy email login is unavailable');}
-  else if(a==='create'){requestPrivyLogin();else toast('Privy login is unavailable');}
+  else if(a==='pick'){if(window.__pulsePrivyLogin)requestPrivyLogin();else toast('Privy wallet connection is unavailable');}
+  else if(a==='send'){if(window.__pulsePrivyLogin)requestPrivyLogin();else toast('Privy email login is unavailable');}
+  else if(a==='create'){if(window.__pulsePrivyLogin)requestPrivyLogin();else toast('Privy login is unavailable');}
   else if(a==='fund'){const v=parseFloat(t.dataset.v);spin('Waiting for your deposit',()=>{acct.balance=Math.round((acct.balance+v)*1e6)/1e6;updateAcctUI();continuePending();},1100);}
   else if(a==='approve'){const n=parseInt(t.dataset.n,10);spin('Waiting for your signature',()=>{acct.pack=n;continuePending();},800);}
   else if(a==='addfunds'){aStep='fund';renderAuth();}
@@ -834,12 +834,18 @@ $('auth').addEventListener('click',e=>{if(e.target===$('auth'))closeAuth();});
 $('gateAcct').addEventListener('click',()=>{pendingRun=null;if(!acct.signedIn&&window.__pulsePrivyLogin){window.__pulsePrivyLogin();return;}openAuth(acct.signedIn?'ready':'choose');});
 $('acctbtn').addEventListener('click',()=>{closeMore();pendingRun=null;if(!acct.signedIn&&window.__pulsePrivyLogin){window.__pulsePrivyLogin();return;}openAuth(acct.signedIn?'ready':'choose');});
 updateAcctUI();
-$('scan').addEventListener('click',()=>requirePay(()=>{
-  $('gate').hidden=true;mode='token';started=true;chipSig='';selected=null;
-  setModeUI();
-  summaryAuto=false;seek(0);
-  if(!tourSeen.token)startTour();else play();
-}));
+$('scan').addEventListener('click',async()=>{
+  const address=($('addr').value||'').trim();
+  if(!/^0x[0-9a-fA-F]{40}$/.test(address)){toast('Enter a valid Arc token address');return}
+  if(!acct.signedIn){pendingRun=()=>$('scan').click();requestPrivyLogin();return}
+  $('scan').disabled=true;toast('Reading live Arc transfer evidence…');
+  try{
+    const response=await fetch('/api/scan/token',{method:'POST',headers:{'content-type':'application/json','x-pulse-wallet':acct.addr||''},body:JSON.stringify({address})});
+    const live=await response.json();if(!response.ok)throw new Error(live.error||'Live token scan failed');
+    N=Math.max(1,live.N);BLOCKS=live.blocks;STATES=live.states;IDS=live.ids;NAMES=live.names;mode='token';started=true;chipSig='';selected=null;$('tokname').textContent=live.meta?.symbol||'TOKEN';$('subline').textContent=`${live.meta?.name||'Live token'} · Arc testnet · ${live.meta?.transferCount||0} transfers`;$('gate').hidden=true;setModeUI();summaryAuto=false;seek(0);play();
+  }catch(error){toast(error instanceof Error?error.message:'Unable to reach Arc testnet')}
+  finally{$('scan').disabled=false}
+});
 $('scanC').addEventListener('click',()=>requirePay(async()=>{
   const input=$('contractAddr'), address=(input.value||'').trim();
   if(!/^0x[0-9a-fA-F]{40}$/.test(address)){toast('Enter a valid Arc contract address');return;}
