@@ -90,7 +90,7 @@ document.addEventListener('click',e=>{
 },true);
 document.addEventListener('keydown',e=>{
   if((e.key==='Enter'||e.key===' ')&&e.target.classList&&e.target.classList.contains('term')){e.preventDefault();showGloss(e.target);}
-  if(e.key==='Escape'){if(!$('auth').hidden)closeAuth();$('gloss').hidden=true;closeMore();if(!$('simple').hidden)closeSimple();else if(tour)endTour(false);}
+  if(e.key==='Escape'){if(!$('auth').hidden)closeAuth();if(!$('history').hidden)$('history').hidden=true;$('gloss').hidden=true;closeMore();if(!$('simple').hidden)closeSimple();else if(tour)endTour(false);}
 });
 function closeMore(){$('more').hidden=true;$('morebtn').setAttribute('aria-expanded','false');}
 
@@ -600,7 +600,8 @@ $('play').addEventListener('click',()=>{playing?pause():play();});
 $('speed').addEventListener('click',()=>{speed=speed===1?2:speed===2?4:1;$('speed').textContent=speed+'×';});
 $('keybtn').addEventListener('click',()=>{$('key').hidden=!$('key').hidden;});
 $('findbtn').addEventListener('click',()=>{cPanelOpen=!cPanelOpen;if(!cPanelOpen)selected=null;renderPanel();if(!cPanelOpen)hidePanel();});
-$('historybtn').addEventListener('click',async()=>{closeMore();if(!acct.addr){toast('Connect Privy to view scan history');return;}try{const r=await fetch('/api/history?wallet='+encodeURIComponent(acct.addr));const data=await r.json();toast(data.scans?.length?`${data.scans.length} completed scan${data.scans.length===1?'':'s'} on this wallet`:'No scans recorded yet');}catch{toast('History is temporarily unavailable');}});
+async function openHistory(){closeMore();$('history').hidden=false;$('historyStatus').textContent='Loading history…';$('historyList').innerHTML='';if(!acct.addr){$('historyStatus').textContent='Connect a wallet to view private scan history.';return}try{const r=await fetch('/api/history?wallet='+encodeURIComponent(acct.addr),{cache:'no-store'});const data=await r.json();if(!r.ok)throw new Error(data.error||'History unavailable');const scans=data.scans||[];$('historyStatus').textContent=scans.length?`${scans.length} recent scan${scans.length===1?'':'s'}`:'No scans recorded for this wallet yet.';$('historyList').innerHTML=scans.map(s=>{const status=s.status||'complete';const summary=typeof s.summary==='string'?JSON.parse(s.summary||'{}'):s.summary||{};const target=s.target_address||'';return `<article class="hrow"><div><strong>${s.scan_type==='token'?'Token':'Contract'} scan</strong><div><code>${target.slice(0,10)}…${target.slice(-8)}</code></div></div><div><span class="hbadge ${status==='failed'?'failed':''}">${status}</span><div class="hmeta">${new Date(s.created_at).toLocaleString()}</div></div></article>`}).join('')}catch{ $('historyStatus').textContent='History is temporarily unavailable. Try again.'}}
+$('historybtn').addEventListener('click',openHistory);$('historyClose').addEventListener('click',()=>{$('history').hidden=true});$('history').addEventListener('click',e=>{if(e.target.id==='history')$('history').hidden=true});
 $('newscan').addEventListener('click',()=>{pause();$('gate').hidden=false;});
 function scrubTo(e){const r=ecg.getBoundingClientRect();pause();seek(Math.floor((e.clientX-r.left)/r.width*N));}
 ecg.addEventListener('pointerdown',e=>{if(!started||mode!=='token')return;scrubbing=true;ecg.setPointerCapture(e.pointerId);scrubTo(e);});
