@@ -746,8 +746,10 @@ const COST=.001;
 const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const blankAcct=()=>({signedIn:false,method:null,addr:'',email:'',balance:0,pack:0});
 let acct=blankAcct(),pendingRun=null,aTimer=0,aStep='choose',aEmail='';
+const requestPrivyLogin=()=>window.__pulsePrivyLogin?window.__pulsePrivyLogin():window.parent!==window&&window.parent.postMessage({type:'pulse:login'},location.origin);
+const requestPrivyLogout=()=>window.__pulsePrivyLogout?window.__pulsePrivyLogout():window.parent!==window&&window.parent.postMessage({type:'pulse:logout'},location.origin);
 const bal3=x=>x.toFixed(3);
-function updateAcctUI(){$('gateAcct').textContent=acct.signedIn?acct.addr+' · '+bal3(acct.balance):'Connect';}
+function updateAcctUI(){const label=acct.signedIn?(acct.addr?acct.addr.slice(0,6)+'…'+acct.addr.slice(-4):'Connected'):'Connect wallet';$('gateAcct').textContent=label;$('gateAcct').setAttribute('aria-label',acct.signedIn?'Wallet connected: '+(acct.addr||'unknown'):'Connect wallet');}
 function syncPrivyAccount(detail){
   if(!detail?.authenticated)return;
   acct=Object.assign(blankAcct(),{signedIn:true,method:detail.walletType==='privy'?'email':'wallet',addr:detail.address||'',email:detail.email||''});
@@ -755,7 +757,8 @@ function syncPrivyAccount(detail){
   if(pendingRun)continuePending();else{aStep=acct.balance>=COST?'ready':'fund';if(!$('auth').hidden)renderAuth();}
 }
 window.addEventListener('pulse:privy-authenticated',e=>syncPrivyAccount(e.detail));
-window.addEventListener('pulse:privy-signed-out',()=>{acct=blankAcct();updateAcctUI();closeAuth();});
+ window.addEventListener('pulse:privy-signed-out',()=>{acct=blankAcct();updateAcctUI();closeAuth();});
+ window.addEventListener('message',e=>{if(e.origin!==location.origin)return;if(e.data?.type==='pulse:account')syncPrivyAccount(e.data.detail);if(e.data?.type==='pulse:signed-out'){acct=blankAcct();updateAcctUI();closeAuth();}});
 if(window.__pulsePrivyAccount)syncPrivyAccount(window.__pulsePrivyAccount);
 function openAuth(step){aStep=step;$('auth').hidden=false;renderAuth();setTimeout(()=>{const f=$('aBody').querySelector('input,button');if(f)f.focus();},30);}
 function closeAuth(){clearTimeout(aTimer);$('auth').hidden=true;pendingRun=null;}
@@ -764,6 +767,8 @@ function spin(msg,next,ms){
   clearTimeout(aTimer);aTimer=setTimeout(next,ms||900);
 }
 function charge(){
+  if(!window.__pulsePrivySendUsdc) throw new Error('Wallet settlement is unavailable')
+  try { await window.__pulsePrivySendUsdc('', COST) } catch (error) { toast(error instanceof Error ? error.message : 'Payment settlement is not configured'); return }
   acct.balance=Math.round((acct.balance-COST)*1e6)/1e6;
   if(acct.method==='wallet')acct.pack=Math.max(0,acct.pack-1);
   updateAcctUI();toast('Paid 0.001 USDC · balance '+bal3(acct.balance));
@@ -816,13 +821,13 @@ $('aBody').addEventListener('click',e=>{
   const a=t.dataset.a;
   if(a==='wallet'||a==='email'){if(window.__pulsePrivyLogin){window.__pulsePrivyLogin();}else{aStep=a;renderAuth();}}
   else if(a==='back'){aStep='choose';renderAuth();}
-  else if(a==='pick'){if(window.__pulsePrivyLogin)window.__pulsePrivyLogin();else toast('Privy wallet connection is unavailable');}
-  else if(a==='send'){if(window.__pulsePrivyLogin)window.__pulsePrivyLogin();else toast('Privy email login is unavailable');}
-  else if(a==='create'){if(window.__pulsePrivyLogin)window.__pulsePrivyLogin();else toast('Privy login is unavailable');}
+  else if(a==='pick'){requestPrivyLogin();else toast('Privy wallet connection is unavailable');}
+  else if(a==='send'){requestPrivyLogin();else toast('Privy email login is unavailable');}
+  else if(a==='create'){requestPrivyLogin();else toast('Privy login is unavailable');}
   else if(a==='fund'){const v=parseFloat(t.dataset.v);spin('Waiting for your deposit',()=>{acct.balance=Math.round((acct.balance+v)*1e6)/1e6;updateAcctUI();continuePending();},1100);}
   else if(a==='approve'){const n=parseInt(t.dataset.n,10);spin('Waiting for your signature',()=>{acct.pack=n;continuePending();},800);}
   else if(a==='addfunds'){aStep='fund';renderAuth();}
-  else if(a==='signout'){if(window.__pulsePrivyLogout)window.__pulsePrivyLogout();else{acct=blankAcct();updateAcctUI();closeAuth();}}
+  else if(a==='signout'){requestPrivyLogout();}
 });
 $('ax').addEventListener('click',closeAuth);
 $('auth').addEventListener('click',e=>{if(e.target===$('auth'))closeAuth();});
