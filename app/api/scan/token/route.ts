@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { checkRateLimit } from '@/lib/rate-limit'
-import { analyzeTokenTransfers, formatTokenAmount, TransferEvidence, ZERO_ADDRESS } from '@/lib/token-analysis'
+import { getVerifiedPrivyWallet, WalletAuthError } from '@/lib/privy-auth'
+import { analyzeTokenTransfers, formatTokenAmount, TransferEvidence } from '@/lib/token-analysis'
 import { tokenScanRequestSchema, tokenScanSchema } from '@/lib/schemas'
 
 export const runtime = 'nodejs'
@@ -107,7 +108,7 @@ function decodeAbiString(value: string | null): string | null {
     let start = 0
     let length = 32
 
-    if (firstWord === 32n && data.length >= 128) {
+    if (firstWord === BigInt(32) && data.length >= 128) {
       const dynamicLength = Number(BigInt(`0x${data.slice(64, 128)}`))
       if (!Number.isSafeInteger(dynamicLength) || dynamicLength < 0 || dynamicLength > 1024) return null
       start = 128
@@ -125,12 +126,14 @@ function decodeAbiString(value: string | null): string | null {
   }
 }
 
-function parseTransferLog(log: RawTransferLog): TransferEvidence | null {
+function parseTransferLog(value: unknown): TransferEvidence | null {
+  if (!value || typeof value !== 'object') return null
+  const log = value as RawTransferLog
   const topics = log.topics
   if (!Array.isArray(topics) || topics.length < 3 || typeof topics[0] !== 'string' || topics[0].toLowerCase() !== TRANSFER_TOPIC) return null
   if (typeof topics[1] !== 'string' || typeof topics[2] !== 'string' || typeof log.data !== 'string') return null
   if (!/^0x[0-9a-f]{64}$/i.test(topics[1]) || !/^0x[0-9a-f]{64}$/i.test(topics[2])) return null
-  if (!/^0x[0-9a-f]+$/i.test(log.data)) return null
+  if (!/^0x[0-9a-f]{64}$/i.test(log.data)) return null
   if (typeof log.transactionHash !== 'string' || !/^0x[0-9a-f]{64}$/i.test(log.transactionHash)) return null
 
   const blockNumber = parseQuantity(log.blockNumber)
@@ -148,11 +151,10 @@ function parseTransferLog(log: RawTransferLog): TransferEvidence | null {
   }
 }
 
-async function saveHistory(wallet: string | null, address: string, status: 'complete' | 'failed', summary: Record<string, unknown>) {
-  if (!wallet || !/^0x[0-9a-fA-F]{40}$/.test(wallet)) return
+async function saveHistory(userId: string, walletAddress: string, address: string, status: 'complete' | 'failed', summary: Record<string, unknown>) {
   await db.execute(sql`
-    INSERT INTO pulse_scan_history (wallet_address, scan_type, target_address, status, summary)
-    VALUES (${wallet.toLowerCase()}, 'token', ${address.toLowerCase()}, ${status}, ${JSON.stringify(summary)}::jsonb)
+    INSERT INTO pulse_scan_history (wallet_address, privy_user_id, scan_type, target_address, status, summary)
+    VALUES (${walletAddress.toLowerCase()}, ${userId}, 'token', ${address.toLowerCase()}, ${status}, ${JSON.stringify(summary)}::jsonb)
   `)
 }
 
@@ -171,11 +173,19 @@ export async function POST(request: Request) {
     return response(requestId, { error: 'service_unavailable' }, 503)
   }
 
+  let verifiedWallet: Awaited<ReturnType<typeof getVerifiedPrivyWallet>>
+  try {
+    verifiedWallet = await getVerifiedPrivyWallet(request, request.headers.get('x-pulse-wallet') ?? '')
+  } catch (error) {
+    const status = error instanceof WalletAuthError ? error.status : 503
+    const code = error instanceof WalletAuthError ? error.code : 'auth_unavailable'
+    return response(requestId, { error: code }, status)
+  }
+
   const parsed = tokenScanRequestSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return response(requestId, { error: 'invalid_input' }, 400)
 
   const address = parsed.data.address.toLowerCase()
-  const wallet = request.headers.get('x-pulse-wallet')
   try {
     const [chainIdHex, code, latestHex, symbolResult, nameResult, decimalsResult, supplyResult] = await Promise.all([
       rpc('eth_chainId', []),
@@ -187,12 +197,16 @@ export async function POST(request: Request) {
       optionalCall(address, '0x18160ddd'),
     ])
 
-    if (parseQuantity(chainIdHex) !== ARC_CHAIN_ID) {
-      console.info(JSON.stringify({ event: 'pulse.token_scan.completed', requestId, outcome: 'wrong_network', durationMs: Date.now() - startedAt }))
-      return response(requestId, { error: 'wrong_network' }, 502)
-    }
-    if (typeof code !== 'string' || code === '0x') {
-      await saveHistory(wallet, address, 'failed', { error: 'not_a_contract' }).catch(() => undefined)
+  if (parseQuantity(chainIdHex) !== ARC_CHAIN_ID) {
+    await saveHistory(verifiedWallet.userId, verifiedWallet.walletAddress, address, 'failed', { error: 'wrong_network' }).catch(() => undefined)
+    console.info(JSON.stringify({ event: 'pulse.token_scan.completed', requestId, outcome: 'wrong_network', durationMs: Date.now() - startedAt }))
+    return response(requestId, { error: 'wrong_network' }, 502)
+  }
+
+    if (typeof code !== 'string') throw new Error('arc_rpc_invalid_code')
+    if (code === '0x') {
+      await saveHistory(verifiedWallet.userId, verifiedWallet.walletAddress, address, 'failed', { error: 'not_a_contract' }).catch(() => undefined)
+      console.info(JSON.stringify({ event: 'pulse.token_scan.completed', requestId, outcome: 'not_a_contract', durationMs: Date.now() - startedAt }))
       return response(requestId, { error: 'not_a_contract' }, 422)
     }
 
@@ -207,9 +221,11 @@ export async function POST(request: Request) {
     }])
     if (!Array.isArray(rawLogs)) throw new Error('arc_rpc_invalid_logs')
 
-    const parsedEvents = rawLogs.map((log) => parseTransferLog(log as RawTransferLog))
+    const parsedEvents = rawLogs.map(parseTransferLog)
     const invalidEvents = parsedEvents.filter((event) => event === null).length
-    const validEvents = parsedEvents.filter((event): event is TransferEvidence => event !== null)
+    const validEvents = parsedEvents
+      .filter((event): event is TransferEvidence => event !== null)
+      .sort((a, b) => a.blockNumber - b.blockNumber || a.logIndex - b.logIndex)
     const events = validEvents.length > MAX_ANALYZED_EVENTS ? validEvents.slice(-MAX_ANALYZED_EVENTS) : validEvents
     const decimalsHex = parseQuantity(decimalsResult)
     const decimals = decimalsHex !== null && decimalsHex <= 36 ? decimalsHex : null
@@ -240,7 +256,7 @@ export async function POST(request: Request) {
       scannedAt: new Date().toISOString(),
     })
 
-    await saveHistory(wallet, address, 'complete', {
+    await saveHistory(verifiedWallet.userId, verifiedWallet.walletAddress, address, 'complete', {
       name: result.token.name,
       symbol: result.token.symbol,
       transferCount: result.metrics.transferCount,
@@ -264,7 +280,7 @@ export async function POST(request: Request) {
     }))
     return response(requestId, result)
   } catch (error) {
-    await saveHistory(wallet, address, 'failed', { error: 'arc_rpc_unavailable' }).catch(() => undefined)
+    await saveHistory(verifiedWallet.userId, verifiedWallet.walletAddress, address, 'failed', { error: 'arc_rpc_unavailable' }).catch(() => undefined)
     console.error(JSON.stringify({
       event: 'pulse.token_scan.failed',
       requestId,

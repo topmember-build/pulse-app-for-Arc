@@ -2,11 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { checkRateLimit } from '@/lib/rate-limit'
-import { z } from 'zod'
+import { getVerifiedPrivyWallet, WalletAuthError } from '@/lib/privy-auth'
 
 export const runtime = 'nodejs'
-
-const querySchema = z.object({ wallet: z.string().regex(/^0x[0-9a-fA-F]{40}$/) })
 
 export async function GET(request: Request) {
   const requestId = randomUUID()
@@ -27,18 +25,31 @@ export async function GET(request: Request) {
     return Response.json({ error: 'service_unavailable' }, { status: 503, headers: responseHeaders })
   }
 
-  const wallet = new URL(request.url).searchParams.get('wallet')
-  const parsed = querySchema.safeParse({ wallet })
-  if (!parsed.success) return Response.json({ error: 'invalid_wallet' }, { status: 400, headers: responseHeaders })
+  const walletAddress = new URL(request.url).searchParams.get('wallet') ?? ''
+  let verifiedWallet: Awaited<ReturnType<typeof getVerifiedPrivyWallet>>
+  try {
+    verifiedWallet = await getVerifiedPrivyWallet(request, walletAddress)
+  } catch (error) {
+    const status = error instanceof WalletAuthError ? error.status : 503
+    const code = error instanceof WalletAuthError ? error.code : 'auth_unavailable'
+    return Response.json({ error: code }, { status, headers: responseHeaders })
+  }
 
   try {
     const rows = await db.execute(sql`
-      SELECT id, scan_type, target_address, network, status, summary, created_at
+      SELECT id, scan_type, target_address, network,
+        CASE
+          WHEN status = 'pending' AND created_at < now() - interval '10 minutes' THEN 'failed'
+          ELSE status
+        END AS status,
+        summary, created_at
       FROM pulse_scan_history
-      WHERE lower(wallet_address) = lower(${parsed.data.wallet})
+      WHERE lower(wallet_address) = lower(${verifiedWallet.walletAddress})
+        AND (privy_user_id = ${verifiedWallet.userId} OR privy_user_id IS NULL)
       ORDER BY created_at DESC
       LIMIT 25
     `)
+
     console.info(JSON.stringify({ event: 'pulse.scan_history.read', requestId, durationMs: Date.now() - startedAt, resultCount: rows.rows.length }))
     return Response.json({ scans: rows.rows }, { headers: responseHeaders })
   } catch (error) {

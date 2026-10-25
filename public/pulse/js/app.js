@@ -600,9 +600,51 @@ $('play').addEventListener('click',()=>{playing?pause():play();});
 $('speed').addEventListener('click',()=>{speed=speed===1?2:speed===2?4:1;$('speed').textContent=speed+'×';});
 $('keybtn').addEventListener('click',()=>{$('key').hidden=!$('key').hidden;});
 $('findbtn').addEventListener('click',()=>{cPanelOpen=!cPanelOpen;if(!cPanelOpen)selected=null;renderPanel();if(!cPanelOpen)hidePanel();});
-async function openHistory(){closeMore();$('history').hidden=false;$('historyStatus').textContent='Loading history…';$('historyList').innerHTML='';if(!acct.addr){$('historyStatus').textContent='Connect a wallet to view private scan history.';return}try{const r=await fetch('/api/history?wallet='+encodeURIComponent(acct.addr),{cache:'no-store'});const data=await r.json();if(!r.ok)throw new Error(data.error||'History unavailable');const scans=data.scans||[];$('historyStatus').textContent=scans.length?`${scans.length} recent scan${scans.length===1?'':'s'}`:'No scans recorded for this wallet yet.';$('historyList').innerHTML=scans.map(s=>{const status=s.status||'complete';const summary=typeof s.summary==='string'?JSON.parse(s.summary||'{}'):s.summary||{};const target=s.target_address||'';return `<article class="hrow"><div><strong>${s.scan_type==='token'?'Token':'Contract'} scan</strong><div><code>${target.slice(0,10)}…${target.slice(-8)}</code></div></div><div><span class="hbadge ${status==='failed'?'failed':''}">${status}</span><div class="hmeta">${new Date(s.created_at).toLocaleString()}</div></div></article>`}).join('')}catch{ $('historyStatus').textContent='History is temporarily unavailable. Try again.'}}
-$('historybtn').addEventListener('click',openHistory);$('historyClose').addEventListener('click',()=>{$('history').hidden=true});$('history').addEventListener('click',e=>{if(e.target.id==='history')$('history').hidden=true});
-$('newscan').addEventListener('click',()=>{pause();$('gate').hidden=false;});
+function historySummary(scan,summary){
+  if(scan.status==='failed')return scanErrorMessage(summary.error||'arc_rpc_unavailable');
+  if(scan.scan_type==='token')return `${Number(summary.transferCount||0).toLocaleString()} transfers · ${Number(summary.signalCount||0).toLocaleString()} flagged signals`;
+  return `${Number(summary.findings||0).toLocaleString()} contract findings`;
+}
+async function openHistory(){
+  closeMore();$('history').hidden=false;$('historyStatus').textContent='Loading history…';$('historyList').replaceChildren();
+  if(!acct.addr){
+  $('historyStatus').replaceChildren(document.createTextNode('Connect a wallet to view scans associated with its address. '));
+  const connect=reportElement('button','btn hretry','Connect wallet');connect.type='button';connect.addEventListener('click',()=>{$('history').hidden=true;openAuth('choose');});
+  $('historyStatus').append(connect);return;
+  }
+
+  try{
+    const response=await fetch('/api/history?wallet='+encodeURIComponent(acct.addr),{cache:'no-store',headers:await getPrivyAuthorizationHeaders()});
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.error||'History unavailable');
+    const scans=data.scans||[];
+    $('historyStatus').textContent=scans.length?`${scans.length} recent scan${scans.length===1?'':'s'}`:'No scans recorded for this wallet yet.';
+    scans.forEach(scan=>{
+      const summary=typeof scan.summary==='string'?(()=>{try{return JSON.parse(scan.summary||'{}')}catch{return {}}})():(scan.summary||{});
+      const target=typeof scan.target_address==='string'?scan.target_address:'';
+      const article=reportElement('article','hrow');
+      const details=reportElement('div');
+      details.append(reportElement('strong','',scan.scan_type==='token'?'Token scan':'Contract scan'));
+      const address=reportElement('div');const addressCode=reportElement('code','',shortAddress(target));addressCode.title=target;address.append(addressCode);
+      details.append(address,reportElement('div','hsummary',historySummary(scan,summary)));
+      const statusColumn=reportElement('div');
+      const status=reportElement('span','hbadge'+(scan.status==='failed'?' failed':''),scan.status||'complete');
+      statusColumn.append(status,reportElement('div','hmeta',new Date(scan.created_at).toLocaleString()));
+      const rescan=reportElement('button','btn hretry',scan.status==='failed'?'Retry scan':'Scan again');
+      rescan.type='button';rescan.dataset.rescan='true';rescan.dataset.scanType=scan.scan_type==='token'?'token':'contract';rescan.dataset.target=target;
+      article.append(details,statusColumn,rescan);$('historyList').append(article);
+    });
+  }catch(error){$('historyStatus').textContent=scanErrorMessage(error instanceof Error?error.message:'history_unavailable');}
+}
+$('historyList').addEventListener('click',event=>{
+  const button=event.target.closest('button[data-rescan]');if(!button)return;
+  const address=button.dataset.target||'';if(!/^0x[0-9a-fA-F]{40}$/.test(address)){toast('This saved scan does not have a valid address');return;}
+  const kind=button.dataset.scanType;$('history').hidden=true;returnToScanner(address);
+  if(kind==='contract'){tab('contract');$('contractAddr').value=address;$('scanC').click();}
+  else $('scan').click();
+});
+$('historybtn').addEventListener('click',openHistory);$('gateHistory').addEventListener('click',openHistory);$('historyClose').addEventListener('click',()=>{$('history').hidden=true});$('history').addEventListener('click',e=>{if(e.target.id==='history')$('history').hidden=true});
+$('newscan').addEventListener('click',()=>returnToScanner());
 function scrubTo(e){const r=ecg.getBoundingClientRect();pause();seek(Math.floor((e.clientX-r.left)/r.width*N));}
 ecg.addEventListener('pointerdown',e=>{if(!started||mode!=='token')return;scrubbing=true;ecg.setPointerCapture(e.pointerId);scrubTo(e);});
 ecg.addEventListener('pointermove',e=>{if(scrubbing)scrubTo(e);});
@@ -613,12 +655,21 @@ window.addEventListener('keydown',e=>{
 });
 let toastT=0;
 function toast(msg){const t=$('toast');t.textContent=msg;t.style.opacity=1;clearTimeout(toastT);toastT=setTimeout(()=>t.style.opacity=0,2400);}
-function reportElement(tag,className='',text=''){
+  function reportElement(tag,className='',text=''){
   const node=document.createElement(tag);
   if(className)node.className=className;
   if(text!==undefined&&text!==null)node.textContent=String(text);
   return node;
-}
+  }
+  async function getPrivyAuthorizationHeaders(){
+  let getAccessToken=window.__pulsePrivyGetAccessToken;
+  if(!getAccessToken&&window.parent!==window){try{getAccessToken=window.parent.__pulsePrivyGetAccessToken}catch{}}
+  if(typeof getAccessToken!=='function')throw new Error('authentication_required');
+  const accessToken=await getAccessToken();
+  if(!accessToken)throw new Error('authentication_required');
+  return {authorization:`Bearer ${accessToken}`};
+  }
+
 function displayAmount(value){
   if(value===null||value===undefined)return 'Unavailable';
   const [whole,fraction='']=String(value).split('.');
@@ -642,11 +693,12 @@ function showTokenReport(report){
   identity.append(reportElement('div','report-brand','Pulse · Arc testnet'),reportElement('h1','report-title',report.token.name),reportElement('div','report-symbol',report.token.symbol+' · ERC-20 transfer evidence'));
   const copy=reportElement('code','report-copy',report.token.address);copy.title=report.token.address;
   const actions=reportElement('div','report-head-actions');
+  const historyButton=reportElement('button','btn','History');historyButton.type='button';historyButton.addEventListener('click',openHistory);
   const copyButton=reportElement('button','btn','Copy address');copyButton.type='button';
   copyButton.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(report.token.address);toast('Token address copied');}catch{toast('Clipboard is unavailable in this browser');}});
   const newButton=reportElement('button','btn primary','New scan');newButton.type='button';
   newButton.addEventListener('click',()=>returnToScanner());
-  actions.append(copyButton,newButton);identity.append(copy);header.append(identity,actions);shell.append(header);
+  actions.append(historyButton,copyButton,newButton);identity.append(copy);header.append(identity,actions);shell.append(header);
 
   const hero=reportElement('div','report-hero');
   const findingCard=reportElement('section','report-card');
@@ -693,7 +745,7 @@ function showTokenReport(report){
     const values=[`#${transfer.blockNumber.toLocaleString()}`,transfer.type,shortAddress(transfer.from),shortAddress(transfer.to),transfer.amount===null?`${transfer.amountRaw} raw units`:`${displayAmount(transfer.amount)} ${report.token.symbol}`,shortAddress(transfer.transactionHash)];
     values.forEach((value,index)=>{
       const cell=row.insertCell();cell.textContent=value;
-      if(index===2||index===3||index===5){cell.title=index===2?transfer.from:index===3?transfer.to:transfer.transactionHash;cell.append;}
+      if(index===2||index===3||index===5){cell.title=index===2?transfer.from:index===3?transfer.to:transfer.transactionHash;}
       if(index===1)cell.className='report-event-'+transfer.type;
     });
   });
@@ -706,6 +758,7 @@ function showTokenReport(report){
   shell.append(reportElement('p','report-note',notes.join(' ')));
   const footer=reportElement('footer','report-footer');
   footer.append(reportElement('span','',`Scanned ${new Date(report.scannedAt).toLocaleString()} · ${report.network.name} · blocks ${report.coverage.fromBlock.toLocaleString()}–${report.coverage.toBlock.toLocaleString()}`));
+  shell.append(footer);
   container.append(shell);container.hidden=false;$('app').classList.add('has-live-report');
 }
 function returnToScanner(address=''){
@@ -717,7 +770,7 @@ function returnToScanner(address=''){
   $('addr').focus();
 }
 function scanErrorMessage(code,retryAfter){
-  const messages={invalid_input:'Enter a valid contract address.',not_a_contract:'No contract bytecode was found at that address on Arc testnet.',wrong_network:'The RPC endpoint is not connected to Arc testnet.',rate_limited:`Too many scans. Try again in ${retryAfter||60} seconds.`,service_unavailable:'The shared scan limiter is temporarily unavailable. Try again shortly.',arc_rpc_unavailable:'Arc testnet is temporarily unavailable. Try again shortly.'};
+  const messages={invalid_input:'Enter a valid contract address.',not_a_contract:'No contract bytecode was found at that address on Arc testnet.',wrong_network:'The RPC endpoint is not connected to Arc testnet.',authentication_required:'Your Privy session expired. Sign in again to continue.',wallet_not_linked:'This wallet is not linked to the signed-in Privy account.',auth_unavailable:'Privy verification is temporarily unavailable. Try again shortly.',rate_limited:`Too many scans. Try again in ${retryAfter||60} seconds.`,service_unavailable:'A shared Pulse service is temporarily unavailable. Try again shortly.',arc_rpc_unavailable:'Arc testnet is temporarily unavailable. Try again shortly.'};
   return messages[code]||'The scan could not be completed. Check the address and try again.';
 }
 
@@ -908,109 +961,34 @@ $('auth').addEventListener('click',e=>{if(e.target===$('auth'))closeAuth();});
 $('gateAcct').addEventListener('click',()=>{pendingRun=null;openAuth(acct.signedIn?'ready':'choose');});
 $('acctbtn').addEventListener('click',()=>{closeMore();pendingRun=null;openAuth(acct.signedIn?'ready':'choose');});
 updateAcctUI();
-  if(pendingRun)continuePending();else{aStep=acct.balance>=COST?'ready':'fund';if(!$('auth').hidden)renderAuth();}
-}
-window.addEventListener('pulse:privy-authenticated',e=>syncPrivyAccount(e.detail));
- window.addEventListener('pulse:privy-signed-out',()=>{acct=blankAcct();updateAcctUI();closeAuth();});
- window.addEventListener('message',e=>{if(e.origin!==location.origin)return;if(e.data?.type==='pulse:account')syncPrivyAccount(e.data.detail);if(e.data?.type==='pulse:signed-out'){acct=blankAcct();updateAcctUI();closeAuth();}});
-if(window.__pulsePrivyAccount)syncPrivyAccount(window.__pulsePrivyAccount);
-function openAuth(step){aStep=step;$('auth').hidden=false;renderAuth();setTimeout(()=>{const f=$('aBody').querySelector('input,button');if(f)f.focus();},30);}
-function closeAuth(){clearTimeout(aTimer);$('auth').hidden=true;pendingRun=null;}
-function spin(msg,next,ms){
-  $('aBody').innerHTML='<h2 id="aT">'+msg+'</h2><p><span class="spin"></span>Preparing your secure wallet session.</p>';
-  clearTimeout(aTimer);aTimer=setTimeout(next,ms||900);
-}
-async function charge(){
-  if(!window.__pulsePrivySendUsdc) throw new Error('Wallet settlement is unavailable')
-  await window.__pulsePrivySendUsdc('', COST)
-  acct.balance=Math.max(0,Math.round((acct.balance-COST)*1e6)/1e6)
-  if(acct.method==='wallet')acct.pack=Math.max(0,acct.pack-1)
-  updateAcctUI();toast('Paid 0.001 USDC · balance '+bal3(acct.balance))
-}
-function requirePay(run){
-  pendingRun=run;
-  if(!acct.signedIn){openAuth('choose');return;}
-  continuePending();
-}
-function continuePending(){
-  if(!pendingRun){aStep='ready';renderAuth();return;}
-  if(acct.balance<COST-1e-9){openAuth('fund');return;}
-  if(acct.method==='wallet'&&acct.pack<=0){openAuth('approve');return;}
-  const run=pendingRun;pendingRun=null;$('auth').hidden=true;charge();run();
-}
-function afterSignIn(){
-  updateAcctUI();
-  if(pendingRun){continuePending();return;}
-  aStep=acct.balance>=COST?'ready':'fund';renderAuth();
-}
-function renderAuth(){
-  const b=$('aBody'),fine='<p class="fine">Wallet connection is secured by Privy. Payments settle on Arc testnet when enabled.</p>';
-  const left=Math.floor(acct.balance/COST+1e-9);
-  if(aStep==='choose'){
-    b.innerHTML='<h2 id="aT">Sign in to scan</h2><p>A scan costs 0.001 USDC, paid from a small balance on Arc. Looking at results costs nothing.</p>'+
-    '<button class="opt" data-a="wallet"><strong>Connect a wallet with Privy</strong><span>Use a wallet you already have or choose a supported wallet in the Privy dialog.</span></button>'+
-    '<button class="opt" data-a="email"><strong>Continue with Privy email</strong><span>No crypto experience needed. Privy creates an embedded wallet for Arc testnet access.</span></button>'+fine;
-  }else if(aStep==='wallet'){
-    b.innerHTML='<h2 id="aT">Connect a wallet</h2><p>Choose where your wallet lives.</p>'+
-    '<button class="opt" data-a="pick" data-w="Browser wallet"><strong>Browser wallet</strong><span>Choose an installed wallet from Privy.</span></button>'+
-    '<button class="opt" data-a="pick" data-w="Phone wallet"><strong>External wallet</strong><span>Connect a supported external wallet through Privy.</span></button>'+
-    '<button class="btn full" data-a="back">Back</button>';
-  }else if(aStep==='email'){
-    b.innerHTML='<h2 id="aT">Continue with Privy</h2><p>Privy securely handles email verification and embedded wallet creation.</p><button class="btn primary full" data-a="send">Open Privy login</button><button class="btn full" data-a="back">Back</button>';
-  }else if(aStep==='code'){
-    b.innerHTML='<h2 id="aT">Confirm your Privy login</h2><p>Privy securely confirms your identity and prepares your embedded wallet on Arc.</p><button class="btn primary full" data-a="create">Continue</button><button class="btn full" data-a="email">Back</button>';
-  }else if(aStep==='fund'){
-    const opt=v=>'<button class="opt" data-a="fund" data-v="'+v+'"><strong>'+v+'</strong><span>about '+Math.round(v/COST)+' scans</span></button>';
-    b.innerHTML='<h2 id="aT">Add USDC for scans</h2><p>'+(acct.method==='email'?'Your wallet is ready. ':'')+'Deposit once into your wallet. Each scan then takes 0.001 USDC from your balance with no network fee.</p><div class="amts">'+opt('0.25')+opt('1')+opt('5')+'</div><p class="fine">Your address: '+acct.addr+'</p>'+fine;
-  }else if(aStep==='approve'){
-    b.innerHTML='<h2 id="aT">Approve scans</h2><p>Your wallet signs a message for each scan. It costs no network fee, but to avoid a prompt every time you can approve a pack.</p>'+
-    '<button class="opt" data-a="approve" data-n="100"><strong>Approve 100 scans</strong><span>Up to 0.100 USDC. You can stop at any time.</span></button>'+
-    '<button class="opt" data-a="approve" data-n="1"><strong>Just this scan</strong><span>You will be asked again next time.</span></button>';
-  }else{
-    b.innerHTML='<h2 id="aT">Your account</h2><dl><dt>Signed in with</dt><dd>'+(acct.method==='email'?'Email':'Wallet')+'</dd><dt>Address</dt><dd>'+acct.addr+'</dd><dt>Balance</dt><dd>'+bal3(acct.balance)+' USDC</dd><dt>Scans left</dt><dd>'+left+'</dd>'+(acct.method==='wallet'?'<dt>Pre-approved scans</dt><dd>'+acct.pack+'</dd>':'')+'</dl><button class="btn primary full" data-a="addfunds">Add funds</button><button class="btn full" data-a="signout">Sign out</button>'+fine;
-  }
-}
-$('aBody').addEventListener('click',e=>{
-  const t=e.target.closest('[data-a]');if(!t)return;
-  const a=t.dataset.a;
-  if(a==='wallet'||a==='email'){if(window.__pulsePrivyLogin)requestPrivyLogin();else{aStep=a;renderAuth();}}
-  else if(a==='back'){aStep='choose';renderAuth();}
-  else if(a==='pick'){if(window.__pulsePrivyLogin)requestPrivyLogin();else toast('Privy wallet connection is unavailable');}
-  else if(a==='send'){if(window.__pulsePrivyLogin)requestPrivyLogin();else toast('Privy email login is unavailable');}
-  else if(a==='create'){if(window.__pulsePrivyLogin)requestPrivyLogin();else toast('Privy login is unavailable');}
-  else if(a==='fund'){const v=parseFloat(t.dataset.v);spin('Waiting for your deposit',()=>{acct.balance=Math.round((acct.balance+v)*1e6)/1e6;updateAcctUI();continuePending();},1100);}
-  else if(a==='approve'){const n=parseInt(t.dataset.n,10);spin('Waiting for your signature',()=>{acct.pack=n;continuePending();},800);}
-  else if(a==='addfunds'){aStep='fund';renderAuth();}
-  else if(a==='signout'){requestPrivyLogout();}
-});
-$('ax').addEventListener('click',closeAuth);
-$('auth').addEventListener('click',e=>{if(e.target===$('auth'))closeAuth();});
-$('gateAcct').addEventListener('click',()=>{pendingRun=null;if(!acct.signedIn&&window.__pulsePrivyLogin){window.__pulsePrivyLogin();return;}openAuth(acct.signedIn?'ready':'choose');});
-$('acctbtn').addEventListener('click',()=>{closeMore();pendingRun=null;if(!acct.signedIn&&window.__pulsePrivyLogin){window.__pulsePrivyLogin();return;}openAuth(acct.signedIn?'ready':'choose');});
-updateAcctUI();
-$('scan').addEventListener('click',async()=>{
+async function runTokenScan(){
   const address=($('addr').value||'').trim();
   if(!/^0x[0-9a-fA-F]{40}$/.test(address)){toast('Enter a valid Arc token address');return}
-  if(!acct.signedIn){pendingRun=()=>$('scan').click();requestPrivyLogin();return}
-  $('scan').disabled=true;toast('Reading live Arc transfer evidence…');
+  const button=$('scan'),originalLabel=button.textContent;
+  button.disabled=true;button.textContent='Scanning…';toast('Reading live Arc transfer evidence…');
   try{
-    const response=await fetch('/api/scan/token',{method:'POST',headers:{'content-type':'application/json','x-pulse-wallet':acct.addr||''},body:JSON.stringify({address})});
-    const live=await response.json();if(!response.ok)throw new Error(live.error||'Live token scan failed');
-    N=Math.max(1,live.N);BLOCKS=live.blocks;STATES=live.states;IDS=live.ids;NAMES=live.names;mode='token';started=true;chipSig='';selected=null;$('tokname').textContent=live.meta?.symbol||'TOKEN';$('subline').textContent=`${live.meta?.name||'Live token'} · Arc testnet · ${live.meta?.transferCount||0} transfers`;$('gate').hidden=true;setModeUI();summaryAuto=false;seek(0);play();
-  }catch(error){toast(error instanceof Error?error.message:'Unable to reach Arc testnet')}
-  finally{$('scan').disabled=false}
-});
-$('scanC').addEventListener('click',()=>requirePay(async()=>{
+    const response=await fetch('/api/scan/token',{method:'POST',headers:{'content-type':'application/json','x-pulse-wallet':acct.addr||'',...(await getPrivyAuthorizationHeaders())},body:JSON.stringify({address})});
+    const live=await response.json().catch(()=>null);
+    if(!response.ok){const failure=new Error(live?.error||'arc_rpc_unavailable');failure.retryAfter=live?.retryAfter;throw failure;}
+    if(!live)throw new Error('arc_rpc_unavailable');
+    mode='token';started=true;chipSig='';selected=null;$('gate').hidden=true;showTokenReport(live);
+  }catch(error){const detail=error instanceof Error?error:null;toast(scanErrorMessage(detail?.message,detail?.retryAfter));}
+  finally{button.disabled=false;button.textContent=originalLabel;}
+}
+$('scan').addEventListener('click',()=>requireWallet(runTokenScan));
+$('scanC').addEventListener('click',()=>requireWallet(async()=>{
   const input=$('contractAddr'), address=(input.value||'').trim();
   if(!/^0x[0-9a-fA-F]{40}$/.test(address)){toast('Enter a valid Arc contract address');return;}
   $('scanC').disabled=true;
   try{
-    const response=await fetch('/api/scan/contract',{method:'POST',headers:{'content-type':'application/json','x-pulse-wallet':acct.addr||''},body:JSON.stringify({address})});
-    const live=await response.json();
-    if(!response.ok)throw new Error(live.error||'Live scan failed');
+    const response=await fetch('/api/scan/contract',{method:'POST',headers:{'content-type':'application/json','x-pulse-wallet':acct.addr||'',...(await getPrivyAuthorizationHeaders())},body:JSON.stringify({address})});
+    const live=await response.json().catch(()=>null);
+    if(!response.ok)throw new Error(live?.error||'arc_rpc_unavailable');
+    if(!live)throw new Error('arc_rpc_unavailable');
+    $('app').classList.remove('awaiting-live-scan','has-live-report');$('live-report').hidden=true;
     $('gate').hidden=true;mode='contract';started=true;pause();chipSig='';
     setupContract(live);cPanelOpen=!mobile;selected=null;setModeUI();hidePanel();updateAll();cPanelOpen=false;openSimple();
-  }catch(error){toast(error.message||'Unable to reach Arc testnet');}
+  }catch(error){toast(scanErrorMessage(error instanceof Error?error.message:'arc_rpc_unavailable'));}
   finally{$('scanC').disabled=false;}
 }));
 function renderKey(){

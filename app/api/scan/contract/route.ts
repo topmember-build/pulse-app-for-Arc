@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { checkRateLimit } from '@/lib/rate-limit'
+import { getVerifiedPrivyWallet, WalletAuthError } from '@/lib/privy-auth'
 import { contractScanRequestSchema, contractScanSchema } from '@/lib/schemas'
 
 export const runtime = 'nodejs'
@@ -29,11 +30,10 @@ async function rpc(method: string, params: unknown[]) {
   return payload.result
 }
 
-async function saveHistory(wallet: string | null, address: string, status: 'complete' | 'failed', summary: Record<string, unknown>) {
-  if (!wallet || !/^0x[0-9a-fA-F]{40}$/.test(wallet)) return
+async function saveHistory(userId: string, walletAddress: string, address: string, status: 'complete' | 'failed', summary: Record<string, unknown>) {
   await db.execute(sql`
-    INSERT INTO pulse_scan_history (wallet_address, scan_type, target_address, status, summary)
-    VALUES (${wallet.toLowerCase()}, 'contract', ${address.toLowerCase()}, ${status}, ${JSON.stringify(summary)}::jsonb)
+    INSERT INTO pulse_scan_history (wallet_address, privy_user_id, scan_type, target_address, status, summary)
+    VALUES (${walletAddress.toLowerCase()}, ${userId}, 'contract', ${address.toLowerCase()}, ${status}, ${JSON.stringify(summary)}::jsonb)
   `)
 }
 
@@ -51,20 +51,30 @@ export async function POST(request: Request) {
     return response(requestId, { error: 'service_unavailable' }, 503)
   }
 
+  let verifiedWallet: Awaited<ReturnType<typeof getVerifiedPrivyWallet>>
+  try {
+    verifiedWallet = await getVerifiedPrivyWallet(request, request.headers.get('x-pulse-wallet') ?? '')
+  } catch (error) {
+    const status = error instanceof WalletAuthError ? error.status : 503
+    const code = error instanceof WalletAuthError ? error.code : 'auth_unavailable'
+    return response(requestId, { error: code }, status)
+  }
+
   const parsed = contractScanRequestSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return response(requestId, { error: 'invalid_input' }, 400)
 
   const address = parsed.data.address.toLowerCase()
-  const wallet = request.headers.get('x-pulse-wallet')
   try {
     const [chainId, code, balance] = await Promise.all([
       rpc('eth_chainId', []),
       rpc('eth_getCode', [address, 'latest']),
       rpc('eth_getBalance', [address, 'latest']),
     ])
-    if (typeof chainId !== 'string' || Number.parseInt(chainId, 16) !== ARC_CHAIN_ID) {
-      return response(requestId, { error: 'wrong_network' }, 502)
-    }
+  if (typeof chainId !== 'string' || Number.parseInt(chainId, 16) !== ARC_CHAIN_ID) {
+    await saveHistory(verifiedWallet.userId, verifiedWallet.walletAddress, address, 'failed', { error: 'wrong_network' }).catch(() => undefined)
+    return response(requestId, { error: 'wrong_network' }, 502)
+  }
+
     if (typeof code !== 'string' || typeof balance !== 'string' || !/^0x[0-9a-f]+$/i.test(balance)) {
       throw new Error('arc_rpc_invalid_response')
     }
@@ -93,13 +103,13 @@ export async function POST(request: Request) {
       powers: [], findings,
     })
 
-    await saveHistory(wallet, address, 'complete', { headline: result.headline, findings: result.findings.length }).catch((error) => {
+    await saveHistory(verifiedWallet.userId, verifiedWallet.walletAddress, address, 'complete', { headline: result.headline, findings: result.findings.length }).catch((error) => {
       console.warn(JSON.stringify({ event: 'pulse.scan_history.write_failed', route: 'contract-scan', requestId, errorName: error instanceof Error ? error.name : 'unknown' }))
     })
     console.info(JSON.stringify({ event: 'pulse.contract_scan.completed', requestId, durationMs: Date.now() - startedAt, isContract, bytecodeBytes }))
     return response(requestId, result)
   } catch (error) {
-    await saveHistory(wallet, address, 'failed', { error: 'arc_rpc_unavailable' }).catch(() => undefined)
+    await saveHistory(verifiedWallet.userId, verifiedWallet.walletAddress, address, 'failed', { error: 'arc_rpc_unavailable' }).catch(() => undefined)
     console.error(JSON.stringify({ event: 'pulse.contract_scan.failed', requestId, durationMs: Date.now() - startedAt, errorName: error instanceof Error ? error.name : 'unknown' }))
     return response(requestId, { error: 'arc_rpc_unavailable' }, 502)
   }

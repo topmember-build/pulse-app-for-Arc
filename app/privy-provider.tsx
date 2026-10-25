@@ -6,7 +6,7 @@ import { useEffect } from 'react'
 const ARC_TESTNET_CHAIN_ID = 5042002
 
 function PulseWalletBridge() {
-  const { login, logout, authenticated, user, ready } = usePrivy()
+  const { login, logout, getAccessToken, authenticated, user, ready } = usePrivy()
   const { wallets } = useWallets()
 
   useEffect(() => {
@@ -28,6 +28,7 @@ function PulseWalletBridge() {
     window.__pulsePrivyLogin = login
     window.__pulsePrivyConnect = login
     window.__pulsePrivyLogout = logout
+  window.__pulsePrivyGetAccessToken = getAccessToken
 
     if (authenticated && user) {
       const wallet = wallets.find((item) => item.walletClientType === 'privy') ?? wallets[0]
@@ -44,10 +45,12 @@ function PulseWalletBridge() {
     }
 
     return () => {
-      delete window.__pulsePrivyLogin
-      delete window.__pulsePrivyLogout
-    }
-  }, [authenticated, login, logout, ready, user, wallets])
+    delete window.__pulsePrivyLogin
+    delete window.__pulsePrivyLogout
+    delete window.__pulsePrivyGetAccessToken
+  }
+  }, [authenticated, getAccessToken, login, logout, ready, user, wallets])
+
 
   return null
 }
@@ -81,6 +84,7 @@ declare global {
   interface Window {
     __pulsePrivyLogin?: () => void
     __pulsePrivyConnect?: () => void
+    __pulsePrivyGetAccessToken?: () => Promise<string | null>
     __pulsePrivyLogout?: () => void
     __pulsePrivySwitchToArc?: () => Promise<void>
     __pulsePrivySendUsdc?: (to: string, amount: number) => Promise<string>

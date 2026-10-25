@@ -43,7 +43,7 @@
 
   <div id="gate">
     <div class="card">
-      <div class="gatebar"><span class="gmark"><svg width="30" height="16" viewBox="0 0 30 16" aria-hidden="true"><polyline points="0,9 8,9 10,6 13,14 16,1 19,11 21,9 30,9" fill="none" stroke="#ff5a45" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>Pulse</span><button class="btn small" id="gateAcct">Connect</button></div>
+      <div class="gatebar"><span class="gmark"><svg width="30" height="16" viewBox="0 0 30 16" aria-hidden="true"><polyline points="0,9 8,9 10,6 13,14 16,1 19,11 21,9 30,9" fill="none" stroke="#ff5a45" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>Pulse</span><div class="gate-actions"><button class="btn small" id="gateHistory">History</button><button class="btn small" id="gateAcct">Connect</button></div></div>
       <h1>Scan anything on Arc</h1>
       <p>Inspect live Arc token transfers and scan smart contracts before you interact with them.</p>
       <div class="seg" role="tablist" aria-label="Scan type">
@@ -103,12 +103,12 @@
   <header class="L-hero">
     <div class="L-copy">
       <h1>Check a token or contract on Arc before you trust it.</h1>
-      <p class="L-lead">Pulse draws Arc's activity as a living heart. Blue veins bring money in, red arteries carry it out, and amber means look twice. You get the answer in plain words first, and the proof when you want it.</p>
+      <p class="L-lead">Pulse turns live Arc data into a plain-language review. Token scans summarize recent ERC-20 Transfer events; contract scans report live bytecode presence. Every result shows what was checked—and what it cannot prove.</p>
       <div class="L-cta">
-        <button class="L-btn" data-go="scan">Try a sample scan</button>
+        <button class="L-btn" data-go="scan">Open the scanner</button>
         <button class="L-btn ghost" data-go="#L-anatomy">See how to read it</button>
       </div>
-      <p class="L-fine">Live wallet connection is powered by Privy. Scan payments are onchain USDC pay-per-call.</p>
+      <p class="L-fine">Wallet connection is powered by Privy. Scans are free during beta; payment settlement is not enabled.</p>
     </div>
     <div class="L-art"><canvas id="L-hero" aria-label="A beating anatomical heart with a blue vein bringing money in and a red artery taking it out"></canvas></div>
   </header>
@@ -120,7 +120,7 @@
       <li><span class="n">2</span><div><h3>One person, dressed as fifty.</h3></div><p>A single wallet can fund dozens of fresh ones and buy through all of them, so a token looks popular when it is not.</p></li>
       <li><span class="n">3</span><div><h3>A rulebook one person can rewrite.</h3></div><p>Some contracts let their owner print new tokens, change fees, or swap the code after you have deposited. A list of transactions never tells you that.</p></li>
     </ol>
-    <p class="L-after">Pulse reads those patterns for you and says what they mean in everyday words.</p>
+    <p class="L-after">The current beta reports observed transfer events and basic contract facts in everyday words; it does not yet detect honeypots, current holder balances, or privileged contract roles.</p>
   </section>
 
   <section class="L-sec rv" id="L-anatomy">
@@ -135,13 +135,13 @@
   <section class="L-sec rv" id="L-steps">
     <h2>Three steps, no expertise needed.</h2>
     <div class="L-steps">
-      <div><span class="n">1</span><h3>Paste an address</h3><p>A token or a contract on Arc. Sign in with a wallet or your email, add a small USDC balance once, and each scan costs a fraction of a cent.</p></div>
-      <div><span class="n">2</span><h3>Read the verdict</h3><p>One sentence and the top three reasons, in everyday words. Unfamiliar terms explain themselves when you tap them.</p></div>
-      <div><span class="n">3</span><h3>Open the heart for proof</h3><p>Every finding points to its evidence: which wallets, which function, which blocks.</p></div>
+      <div><span class="n">1</span><h3>Connect and scan</h3><p>Connect a wallet through Privy, then scan a token or contract on Arc testnet. Scans are free while payment settlement is disabled.</p></div>
+      <div><span class="n">2</span><h3>Review the evidence</h3><p>Read the scanned block range, event-derived metrics, and any rule-based transfer flags. Unfamiliar terms explain themselves when you tap them.</p></div>
+      <div><span class="n">3</span><h3>Open the events</h3><p>Inspect the latest Transfer entries with their block, sender, recipient, amount, and transaction hash.</p></div>
     </div>
     <div class="L-scan">
-      <div><h4>Tokens</h4><p>See which wallets move together and whether early holders cashed out.</p></div>
-      <div><h4>Contracts</h4><p>Find out who controls it, what they can do, and whether selling actually works.</p></div>
+      <div><h4>Tokens</h4><p>Review recent mint and transfer patterns from live Arc Transfer events, with the scanned block range shown.</p></div>
+      <div><h4>Contracts</h4><p>See whether runtime bytecode exists on Arc testnet. Privileged-role and sellability analysis is not enabled yet.</p></div>
       <div><h4>Wallets <em>planned</em></h4><p>Whales, the most active wallets and unusual behavior, on the same heart.</p></div>
     </div>
   </section>
@@ -156,16 +156,16 @@
   <section class="L-sec rv" id="L-price">
     <div class="L-pricegrid">
       <div>
-        <h2>Pay for the scan, not a subscription.</h2>
-        <p class="L-sub">Each scan is a direct onchain USDC payment. No subscriptions, accounts receivable, or billing dashboard.</p>
+        <h2>Free scans during the testnet beta.</h2>
+        <p class="L-sub">No payment is requested while Arc testnet settlement is being configured.</p>
       </div>
-      <div class="L-price"><span class="amt">0.001</span><span class="unit">USDC per scan</span><span class="tag">planned price</span></div>
+      <div class="L-price"><span class="amt">Free</span><span class="unit">during beta</span><span class="tag">no payment enabled</span></div>
     </div>
     <ul class="L-list">
-      <li>Built for Arc, where fees are paid in USDC and sub-cent payments are practical.</li>
-      <li>Connect a wallet you already use, or continue with email and Privy creates an embedded wallet for you. Either way you pay from a small USDC balance.</li>
-      <li>Add a small balance once. After that each scan is a signed message with no network fee, and you can approve a pack of scans so you are not asked every time.</li>
-      <li>Planned: the same scan as an API, so apps and AI agents can check a contract before they trust it.</li>
+      <li>Built for Arc testnet; each live scan reads public chain data and costs nothing during this beta.</li>
+      <li>Connect an existing wallet or use a Privy embedded wallet. Pulse never asks for your recovery phrase.</li>
+      <li>Scan history is limited to the authenticated Privy account and wallet linked to that account.</li>
+      <li>Planned: configurable USDC settlement and a scan API for apps and AI agents.</li>
     </ul>
   </section>
 
@@ -173,23 +173,23 @@
     <h2>What Pulse cannot promise.</h2>
     <ul class="L-list">
       <li><strong>It cannot prove anything is safe.</strong> A clean result means we found no red flags, not that none exist.</li>
-      <li><strong>Wallet links are educated guesses.</strong> They come from patterns, so they show how sure we are and why.</li>
+      <li><strong>Recent transfer patterns are not holder balances.</strong> Token scans only report the observed Arc block window; they do not infer current ownership.</li>
       <li><strong>This is not financial advice.</strong> Never put in money you cannot afford to lose.</li>
-      <li><strong>Arc testnet settlement is the launch environment.</strong> Privy handles wallet connection and embedded-wallet onboarding; payment execution is kept explicit per scan.</li>
+      <li><strong>Arc testnet only.</strong> Wallet connection uses Privy; scan payments are disabled during this beta.</li>
     </ul>
   </section>
 
   <section class="L-sec rv" id="L-faq">
     <h2>Questions people ask.</h2>
-    <details><summary>Why a heart?</summary><p>On Arc, a token's money sits in a pool that every buy and sell passes through, much like blood through a heart. Showing it that way means the picture and the data are the same thing: it beats once per block, money in is blue and money out is red.</p></details>
-    <details><summary>How do I pay, and does Pulse hold my money?</summary><p>Scanning is a payment, so you connect first. You can connect a wallet you already have, or continue with email and Privy creates an embedded wallet. You deposit a small USDC balance once, and each scan takes 0.001 from it. With your own wallet your keys stay with you and you approve scans yourself. A Privy embedded wallet is meant for scan credit rather than savings, so keep the balance small. Pulse never asks for a seed phrase, and looking at results moves no money.</p></details>
+    <details><summary>Why a heart?</summary><p>The heart is Pulse's visual metaphor for onchain activity. Token results list the live Transfer events and exact recent block range they analyze; they do not assume every transfer went through a known liquidity pool.</p></details>
+    <details><summary>Do scans cost anything?</summary><p>No. Token and contract scans are free during the Arc testnet beta. Payment settlement is not enabled, and the app will not request a deposit or scan payment. Pulse never asks for a seed phrase.</p></details>
     <details><summary>Which chain does it support?</summary><p>Arc only. Staying on one chain lets us label Arc's contracts and launchpads properly instead of guessing.</p></details>
-    <details><summary>Is this finished?</summary><p>Pulse is being wired for Arc testnet with live Privy wallet connection and onchain pay-per-call settlement. Findings still explain what the scanner can and cannot prove.</p></details>
+    <details><summary>Is this finished?</summary><p>This is an Arc testnet beta with Privy wallet connection and live RPC reads. Token analysis covers only the latest 500 blocks; contract scans currently check basic runtime facts. Payment settlement and deeper security analysis are not enabled.</p></details>
   </section>
 
   <section class="L-final rv">
     <h2>See it beat.</h2>
-    <button class="L-btn" data-go="scan">Try a sample scan</button>
+    <button class="L-btn" data-go="scan">Open the scanner</button>
     <p class="L-fine">Arc testnet · wallet connection via Privy · not financial advice</p>
   </section>
 </div>
@@ -197,7 +197,7 @@
   <div id="auth" class="modal" hidden><div class="msheet" role="dialog" aria-modal="true" aria-labelledby="aT"><button id="ax" aria-label="Close">×</button><div id="aBody"></div></div></div>
 
   <div id="tip"></div>
-  <div id="history" role="dialog" aria-modal="true" aria-labelledby="historyTitle" hidden><div class="hcard"><button class="hclose" id="historyClose" aria-label="Close scan history">×</button><div class="eyebrow">Connected address</div><h2 id="historyTitle">Scan history</h2><p class="hintro">Scans associated with the currently connected wallet address.</p><div id="historyStatus" class="hstatus">Loading history…</div><div id="historyList" class="hlist"></div></div></div>
+  <div id="history" role="dialog" aria-modal="true" aria-labelledby="historyTitle" hidden><div class="hcard"><button class="hclose" id="historyClose" aria-label="Close scan history">×</button><div class="eyebrow">Authenticated workspace</div><h2 id="historyTitle">Scan history</h2><p class="hintro">History is available to the authenticated Privy account with this wallet linked.</p><div id="historyStatus" class="hstatus">Loading history…</div><div id="historyList" class="hlist"></div></div></div>
   <div id="toast"></div>
 </div>
 

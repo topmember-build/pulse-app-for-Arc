@@ -10,8 +10,8 @@ export type TransferEvidence = {
 }
 
 function percentage(part: bigint, whole: bigint): number | null {
-  if (whole <= 0n) return null
-  return Number((part * 10_000n) / whole) / 100
+  if (whole <= BigInt(0)) return null
+  return Number((part * BigInt(10_000)) / whole) / 100
 }
 
 export function formatTokenAmount(amount: bigint, decimals: number): string {
@@ -37,11 +37,11 @@ export function analyzeTokenTransfers(input: {
   const recipients = new Set<string>()
   const activeAddresses = new Set<string>()
   const recipientAmounts = new Map<string, bigint>()
-  let totalAmount = 0n
-  let mintedAmount = 0n
-  let burnedAmount = 0n
-  let largestTransfer = 0n
-  let inboundAmount = 0n
+  let totalAmount = BigInt(0)
+  let mintedAmount = BigInt(0)
+  let burnedAmount = BigInt(0)
+  let largestTransfer = BigInt(0)
+  let inboundAmount = BigInt(0)
 
   for (const event of events) {
     totalAmount += event.amount
@@ -60,12 +60,12 @@ export function analyzeTokenTransfers(input: {
       recipients.add(event.to)
       activeAddresses.add(event.to)
       inboundAmount += event.amount
-      recipientAmounts.set(event.to, (recipientAmounts.get(event.to) ?? 0n) + event.amount)
+      recipientAmounts.set(event.to, (recipientAmounts.get(event.to) ?? BigInt(0)) + event.amount)
     }
   }
 
   let topRecipient: string | null = null
-  let topRecipientAmount = 0n
+  let topRecipientAmount = BigInt(0)
   for (const [address, amount] of recipientAmounts) {
     if (amount > topRecipientAmount) {
       topRecipient = address
@@ -73,12 +73,12 @@ export function analyzeTokenTransfers(input: {
     }
   }
 
-  const mintedSupplyPct = totalSupply && totalSupply > 0n ? percentage(mintedAmount, totalSupply) : null
+  const mintedSupplyPct = totalSupply && totalSupply > BigInt(0) ? percentage(mintedAmount, totalSupply) : null
   const largestTransferPct = percentage(largestTransfer, totalAmount)
   const topRecipientSharePct = percentage(topRecipientAmount, inboundAmount)
   const signals: Array<{ id: string; severity: 'high' | 'medium' | 'info'; title: string; evidence: string; points: number }> = []
 
-  if (mintedAmount > 0n) {
+  if (mintedAmount > BigInt(0)) {
     if (mintedSupplyPct === null) {
       signals.push({
         id: 'recent-mint', severity: 'info', title: 'Recent mint events observed',
@@ -125,10 +125,11 @@ export function analyzeTokenTransfers(input: {
   }
 
   const score = Math.min(100, signals.reduce((sum, signal) => sum + signal.points, 0))
-  const level = events.length === 0 ? 'insufficient' : score >= 50 ? 'elevated' : score >= 20 ? 'review' : 'low'
+  const hasReviewSignal = signals.some((signal) => signal.severity === 'high' || signal.severity === 'medium')
+  const level = events.length === 0 ? 'insufficient' : score >= 50 ? 'elevated' : score >= 20 || hasReviewSignal ? 'review' : 'low'
   const label = {
     insufficient: 'Insufficient transfer evidence',
-    low: 'No configured transfer flags in this window',
+    low: signals.length ? 'Informational transfer flags observed' : 'No configured transfer flags in this window',
     review: 'Review the observed transfer flags',
     elevated: 'Elevated transfer flags observed',
   }[level]
@@ -142,7 +143,7 @@ export function analyzeTokenTransfers(input: {
       transferEventsObserved: totalObserved,
       transferEventsAnalyzed: events.length,
       invalidEvents,
-      truncated: totalObserved > events.length,
+      truncated: totalObserved - invalidEvents > events.length,
     },
     metrics: {
       transferCount: events.length,
