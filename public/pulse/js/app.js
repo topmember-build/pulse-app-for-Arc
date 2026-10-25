@@ -613,6 +613,113 @@ window.addEventListener('keydown',e=>{
 });
 let toastT=0;
 function toast(msg){const t=$('toast');t.textContent=msg;t.style.opacity=1;clearTimeout(toastT);toastT=setTimeout(()=>t.style.opacity=0,2400);}
+function reportElement(tag,className='',text=''){
+  const node=document.createElement(tag);
+  if(className)node.className=className;
+  if(text!==undefined&&text!==null)node.textContent=String(text);
+  return node;
+}
+function displayAmount(value){
+  if(value===null||value===undefined)return 'Unavailable';
+  const [whole,fraction='']=String(value).split('.');
+  const grouped=whole.replace(/\B(?=(\d{3})+(?!\d))/g,',');
+  const shortened=fraction.slice(0,6).replace(/0+$/,'');
+  return shortened?grouped+'.'+shortened:grouped;
+}
+function displayPercent(value){return value===null||value===undefined?'Unavailable':Number(value).toFixed(2)+'%';}
+function shortAddress(value){return value?value.slice(0,8)+'…'+value.slice(-6):'Unknown';}
+function addReportMetric(parent,label,value,detail=''){
+  const card=reportElement('div','report-metric');
+  card.append(reportElement('span','report-label',label),reportElement('strong','',value));
+  if(detail)card.append(reportElement('span','',detail));
+  parent.append(card);
+}
+function showTokenReport(report){
+  const container=$('live-report'),shell=reportElement('div','report-shell');
+  container.replaceChildren();
+  const header=reportElement('header','report-head');
+  const identity=reportElement('div');
+  identity.append(reportElement('div','report-brand','Pulse · Arc testnet'),reportElement('h1','report-title',report.token.name),reportElement('div','report-symbol',report.token.symbol+' · ERC-20 transfer evidence'));
+  const copy=reportElement('code','report-copy',report.token.address);copy.title=report.token.address;
+  const actions=reportElement('div','report-head-actions');
+  const copyButton=reportElement('button','btn','Copy address');copyButton.type='button';
+  copyButton.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(report.token.address);toast('Token address copied');}catch{toast('Clipboard is unavailable in this browser');}});
+  const newButton=reportElement('button','btn primary','New scan');newButton.type='button';
+  newButton.addEventListener('click',()=>returnToScanner());
+  actions.append(copyButton,newButton);identity.append(copy);header.append(identity,actions);shell.append(header);
+
+  const hero=reportElement('div','report-hero');
+  const findingCard=reportElement('section','report-card');
+  findingCard.append(reportElement('div','report-label','Transfer-based assessment'),reportElement('h2','report-verdict',report.assessment.label));
+  findingCard.append(reportElement('p','report-explainer',`${report.metrics.transferCount.toLocaleString()} valid Transfer events analyzed from blocks ${report.coverage.fromBlock.toLocaleString()}–${report.coverage.toBlock.toLocaleString()}. This is a recent activity window, not a full holder snapshot.`));
+  const scoreCard=reportElement('section','report-card report-score');scoreCard.dataset.level=report.assessment.level;
+  scoreCard.append(reportElement('div','report-label','Observed signal score'),reportElement('strong','',`${report.assessment.score} / 100`),reportElement('p','report-explainer','Rule-based evidence only; not a safety rating.'));
+  hero.append(findingCard,scoreCard);shell.append(hero);
+
+  const metrics=reportElement('section','report-metrics');
+  addReportMetric(metrics,'Transfer events',report.metrics.transferCount.toLocaleString(),'in this block window');
+  addReportMetric(metrics,'Active addresses',report.metrics.activeAddresses.toLocaleString(),`${report.metrics.uniqueSenders.toLocaleString()} senders · ${report.metrics.uniqueRecipients.toLocaleString()} recipients`);
+  addReportMetric(metrics,'Reported total supply',report.token.totalSupply===null?'Unavailable':displayAmount(report.token.totalSupply),report.token.symbol);
+  addReportMetric(metrics,'Minted share of supply',displayPercent(report.metrics.mintedSupplyPct),report.metrics.mintedAmount===null?'Token decimals unavailable':`${displayAmount(report.metrics.mintedAmount)} ${report.token.symbol} minted in window`);
+  addReportMetric(metrics,'Largest transfer share',displayPercent(report.metrics.largestTransferPct),'of total token amount moved in the window');
+  addReportMetric(metrics,'Top recipient share',displayPercent(report.metrics.topRecipientSharePct),'of non-burn incoming transfer volume');
+  shell.append(metrics);
+
+  const signalsSection=reportElement('section','report-section');
+  signalsSection.append(reportElement('h2','','Observed signals'));
+  const signals=reportElement('div','report-signals');
+  if(report.assessment.signals.length){
+    report.assessment.signals.forEach(signal=>{
+      const card=reportElement('article','report-signal');card.dataset.severity=signal.severity;
+      const head=reportElement('div','report-signal-head');
+      const severity=reportElement('span','sev '+(signal.severity==='medium'?'med':signal.severity),signal.severity==='medium'?'Medium':signal.severity==='high'?'High':'Info');
+      head.append(severity,reportElement('strong','',signal.title));
+      card.append(head,reportElement('p','',signal.evidence));signals.append(card);
+    });
+  }else{
+    signals.append(reportElement('div','report-empty',report.assessment.level==='insufficient'?'No valid Transfer events were returned in the scanned window. That can mean little recent activity or incomplete RPC history; it is not a safety finding.':'No configured transfer flags were triggered in this window. This does not establish that the token is safe.'));
+  }
+  signalsSection.append(signals);shell.append(signalsSection);
+
+  const transferSection=reportElement('section','report-section');
+  transferSection.append(reportElement('h2','','Latest transfer events'));
+  const tableWrap=reportElement('div','report-table-wrap');
+  const table=reportElement('table','report-table');
+  const head=table.createTHead().insertRow();
+  ['Block','Type','From','To','Amount','Transaction'].forEach(label=>head.append(reportElement('th','',label)));
+  const body=table.createTBody();
+  report.transfers.forEach(transfer=>{
+    const row=body.insertRow();
+    const values=[`#${transfer.blockNumber.toLocaleString()}`,transfer.type,shortAddress(transfer.from),shortAddress(transfer.to),transfer.amount===null?`${transfer.amountRaw} raw units`:`${displayAmount(transfer.amount)} ${report.token.symbol}`,shortAddress(transfer.transactionHash)];
+    values.forEach((value,index)=>{
+      const cell=row.insertCell();cell.textContent=value;
+      if(index===2||index===3||index===5){cell.title=index===2?transfer.from:index===3?transfer.to:transfer.transactionHash;cell.append;}
+      if(index===1)cell.className='report-event-'+transfer.type;
+    });
+  });
+  if(!report.transfers.length){const row=body.insertRow(),cell=row.insertCell();cell.colSpan=6;cell.textContent='No transfer events to display.';}
+  tableWrap.append(table);transferSection.append(tableWrap);shell.append(transferSection);
+
+  const notes=[report.assessment.note];
+  if(report.coverage.truncated)notes.push(`The RPC returned ${report.coverage.transferEventsObserved.toLocaleString()} events; the newest ${report.coverage.transferEventsAnalyzed.toLocaleString()} were analyzed due to the per-scan safety cap.`);
+  if(report.coverage.invalidEvents)notes.push(`${report.coverage.invalidEvents.toLocaleString()} malformed log entries were excluded.`);
+  shell.append(reportElement('p','report-note',notes.join(' ')));
+  const footer=reportElement('footer','report-footer');
+  footer.append(reportElement('span','',`Scanned ${new Date(report.scannedAt).toLocaleString()} · ${report.network.name} · blocks ${report.coverage.fromBlock.toLocaleString()}–${report.coverage.toBlock.toLocaleString()}`));
+  container.append(shell);container.hidden=false;$('app').classList.add('has-live-report');
+}
+function returnToScanner(address=''){
+  pause();mode='token';selected=null;cPanelOpen=false;
+  $('live-report').hidden=true;$('live-report').replaceChildren();
+  $('app').classList.remove('has-live-report');$('app').classList.add('awaiting-live-scan');
+  $('gate').hidden=false;tab('token');
+  if(address)$('addr').value=address;
+  $('addr').focus();
+}
+function scanErrorMessage(code,retryAfter){
+  const messages={invalid_input:'Enter a valid contract address.',not_a_contract:'No contract bytecode was found at that address on Arc testnet.',wrong_network:'The RPC endpoint is not connected to Arc testnet.',rate_limited:`Too many scans. Try again in ${retryAfter||60} seconds.`,service_unavailable:'The shared scan limiter is temporarily unavailable. Try again shortly.',arc_rpc_unavailable:'Arc testnet is temporarily unavailable. Try again shortly.'};
+  return messages[code]||'The scan could not be completed. Check the address and try again.';
+}
 
 
 /* ---------- simple view ---------- */
@@ -742,19 +849,65 @@ function setModeUI(){
   renderKey();
 }
 
-/* ---------- account: wallet sign-in and pay-per-call flow ---------- */
-const COST=.001;
-const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const blankAcct=()=>({signedIn:false,method:null,addr:'',email:'',balance:0,pack:0});
-let acct=blankAcct(),pendingRun=null,aTimer=0,aStep='choose',aEmail='';
+/* ---------- account: wallet connection ---------- */
+const blankAcct=()=>({signedIn:false,method:null,addr:'',email:''});
+let acct=blankAcct(),pendingRun=null,aStep='choose';
 const requestPrivyLogin=()=>window.__pulsePrivyLogin?window.__pulsePrivyLogin():window.parent!==window&&window.parent.postMessage({type:'pulse:login'},location.origin);
 const requestPrivyLogout=()=>window.__pulsePrivyLogout?window.__pulsePrivyLogout():window.parent!==window&&window.parent.postMessage({type:'pulse:logout'},location.origin);
-const bal3=x=>x.toFixed(3);
 function updateAcctUI(){const label=acct.signedIn?(acct.addr?acct.addr.slice(0,6)+'…'+acct.addr.slice(-4):'Connected'):'Connect wallet';$('gateAcct').textContent=label;$('gateAcct').setAttribute('aria-label',acct.signedIn?'Wallet connected: '+(acct.addr||'unknown'):'Connect wallet');}
 function syncPrivyAccount(detail){
   if(!detail?.authenticated)return;
   acct=Object.assign(blankAcct(),{signedIn:true,method:detail.walletType==='privy'?'email':'wallet',addr:detail.address||'',email:detail.email||''});
   updateAcctUI();
+  if(pendingRun)continuePending();else if(!$('auth').hidden){aStep='ready';renderAuth();}
+}
+window.addEventListener('pulse:privy-authenticated',e=>syncPrivyAccount(e.detail));
+window.addEventListener('pulse:privy-signed-out',()=>{acct=blankAcct();updateAcctUI();closeAuth();});
+window.addEventListener('message',e=>{if(e.origin!==location.origin)return;if(e.data?.type==='pulse:account')syncPrivyAccount(e.data.detail);if(e.data?.type==='pulse:signed-out'){acct=blankAcct();updateAcctUI();closeAuth();}});
+if(window.__pulsePrivyAccount)syncPrivyAccount(window.__pulsePrivyAccount);
+function openAuth(step){aStep=step;$('auth').hidden=false;renderAuth();setTimeout(()=>{const f=$('aBody').querySelector('input,button');if(f)f.focus();},30);}
+function closeAuth(){$('auth').hidden=true;pendingRun=null;}
+function continuePending(){
+  if(!pendingRun||!acct.signedIn)return;
+  if(!/^0x[0-9a-fA-F]{40}$/.test(acct.addr)){pendingRun=null;toast('Privy did not return a wallet address');openAuth('ready');return;}
+  const run=pendingRun;pendingRun=null;$('auth').hidden=true;run();
+}
+function requireWallet(run){
+  if(!acct.signedIn){pendingRun=run;if(window.__pulsePrivyLogin)requestPrivyLogin();else openAuth('choose');return;}
+  if(!/^0x[0-9a-fA-F]{40}$/.test(acct.addr)){toast('Connect an Arc-compatible wallet to scan');openAuth('ready');return;}
+  run();
+}
+function renderAuth(){
+  const body=$('aBody');
+  if(!acct.signedIn){
+    if(aStep==='wallet')body.innerHTML='<h2 id="aT">Connect a wallet</h2><p>Pulse uses Privy to connect your wallet. Scans are free during this beta; no payment is requested.</p><button class="btn primary full" data-a="login">Continue to wallet connection</button><button class="btn full" data-a="back">Back</button>';
+    else if(aStep==='email')body.innerHTML='<h2 id="aT">Continue with email</h2><p>Privy verifies your email and prepares an embedded Arc wallet. Scans are free during this beta.</p><button class="btn primary full" data-a="login">Continue with Privy</button><button class="btn full" data-a="back">Back</button>';
+    else body.innerHTML='<h2 id="aT">Connect to scan</h2><p>A connected wallet is required to run token and contract scans. Pulse will never ask for your recovery phrase. Scans are free during this beta.</p><button class="opt" data-a="wallet"><strong>Connect an existing wallet</strong><span>Choose a supported wallet in the Privy dialog.</span></button><button class="opt" data-a="email"><strong>Continue with email</strong><span>Use a Privy embedded wallet on Arc.</span></button>';
+    return;
+  }
+
+  body.replaceChildren();
+  const title=document.createElement('h2');title.id='aT';title.textContent='Wallet connected';body.append(title);
+  const description=document.createElement('p');description.textContent='Scans are free during this beta. Payment settlement is not enabled.';body.append(description);
+  const details=document.createElement('dl');
+  const rows=[['Connected with',acct.method==='email'?'Privy email':'Wallet'],['Address',acct.addr||'Unavailable']];
+  rows.forEach(([label,value])=>{const dt=document.createElement('dt');dt.textContent=label;const dd=document.createElement('dd');dd.textContent=value;details.append(dt,dd);});
+  body.append(details);
+  const signOut=document.createElement('button');signOut.type='button';signOut.className='btn full';signOut.dataset.a='signout';signOut.textContent='Sign out';body.append(signOut);
+}
+$('aBody').addEventListener('click',e=>{
+  const target=e.target.closest('[data-a]');if(!target)return;
+  const action=target.dataset.a;
+  if(action==='wallet'||action==='email'){aStep=action;renderAuth();}
+  else if(action==='login'){if(window.__pulsePrivyLogin)requestPrivyLogin();else toast('Privy wallet connection is unavailable');}
+  else if(action==='back'){aStep='choose';renderAuth();}
+  else if(action==='signout'){requestPrivyLogout();}
+});
+$('ax').addEventListener('click',closeAuth);
+$('auth').addEventListener('click',e=>{if(e.target===$('auth'))closeAuth();});
+$('gateAcct').addEventListener('click',()=>{pendingRun=null;openAuth(acct.signedIn?'ready':'choose');});
+$('acctbtn').addEventListener('click',()=>{closeMore();pendingRun=null;openAuth(acct.signedIn?'ready':'choose');});
+updateAcctUI();
   if(pendingRun)continuePending();else{aStep=acct.balance>=COST?'ready':'fund';if(!$('auth').hidden)renderAuth();}
 }
 window.addEventListener('pulse:privy-authenticated',e=>syncPrivyAccount(e.detail));

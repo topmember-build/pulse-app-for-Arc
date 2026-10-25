@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="app">
+<div id="app" class="awaiting-live-scan">
   <canvas id="stage" role="img" aria-label="Animated map drawn as an anatomical heart with veins and arteries carrying onchain transactions"></canvas>
 
   <header id="hud">
@@ -62,10 +62,11 @@
         <div id="samples"></div>
         <button class="btn primary full" id="scanC">Scan live contract</button>
       </div>
-      <small>Contract scans read live Arc testnet RPC data. Payment settlement is enabled after the wallet and payment contract are configured.</small>
+      <small>Wallet connection is required to scan. Token results analyze the latest Arc testnet transfer window. Scans are free in this beta; payment settlement is not enabled.</small>
     </div>
   </div>
 
+  <section id="live-report" aria-label="Live token scan report" aria-live="polite" hidden></section>
 
   <div id="more" role="menu" hidden>
     <button role="menuitem" id="keybtn">Key</button>
@@ -196,7 +197,7 @@
   <div id="auth" class="modal" hidden><div class="msheet" role="dialog" aria-modal="true" aria-labelledby="aT"><button id="ax" aria-label="Close">×</button><div id="aBody"></div></div></div>
 
   <div id="tip"></div>
-  <div id="history" role="dialog" aria-modal="true" aria-labelledby="historyTitle" hidden><div class="hcard"><button class="hclose" id="historyClose" aria-label="Close scan history">×</button><div class="eyebrow">Private workspace</div><h2 id="historyTitle">Scan history</h2><p class="hintro">Your completed and failed scans, scoped to the connected wallet.</p><div id="historyStatus" class="hstatus">Loading history…</div><div id="historyList" class="hlist"></div></div></div>
+  <div id="history" role="dialog" aria-modal="true" aria-labelledby="historyTitle" hidden><div class="hcard"><button class="hclose" id="historyClose" aria-label="Close scan history">×</button><div class="eyebrow">Connected address</div><h2 id="historyTitle">Scan history</h2><p class="hintro">Scans associated with the currently connected wallet address.</p><div id="historyStatus" class="hstatus">Loading history…</div><div id="historyList" class="hlist"></div></div></div>
   <div id="toast"></div>
 </div>
 
