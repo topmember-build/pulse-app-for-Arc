@@ -770,7 +770,7 @@ function returnToScanner(address=''){
   $('addr').focus();
 }
 function scanErrorMessage(code,retryAfter){
-  const messages={invalid_input:'Enter a valid contract address.',not_a_contract:'No contract bytecode was found at that address on Arc testnet.',wrong_network:'The RPC endpoint is not connected to Arc testnet.',authentication_required:'Your Privy session expired. Sign in again to continue.',wallet_not_linked:'This wallet is not linked to the signed-in Privy account.',auth_unavailable:'Privy verification is temporarily unavailable. Try again shortly.',rate_limited:`Too many scans. Try again in ${retryAfter||60} seconds.`,service_unavailable:'A shared Pulse service is temporarily unavailable. Try again shortly.',arc_rpc_unavailable:'Arc testnet is temporarily unavailable. Try again shortly.'};
+  const messages={invalid_input:'Enter a valid contract address.',not_a_contract:'No contract bytecode was found at that address on Arc testnet.',wrong_network:'The RPC endpoint is not connected to Arc testnet.',authentication_required:'Your Privy session expired. Sign in again to continue.',wallet_not_linked:'This wallet is not linked to the signed-in Privy account.',auth_unavailable:'Privy verification is temporarily unavailable. Try again shortly.',history_unavailable:'Scan history is temporarily unavailable. Try again shortly.',rate_limited:`Too many scans. Try again in ${retryAfter||60} seconds.`, service_unavailable:'A shared Pulse service is temporarily unavailable. Try again shortly.',arc_rpc_unavailable:'Arc testnet is temporarily unavailable. Try again shortly.'};
   return messages[code]||'The scan could not be completed. Check the address and try again.';
 }
 
@@ -983,12 +983,13 @@ $('scanC').addEventListener('click',()=>requireWallet(async()=>{
   try{
     const response=await fetch('/api/scan/contract',{method:'POST',headers:{'content-type':'application/json','x-pulse-wallet':acct.addr||'',...(await getPrivyAuthorizationHeaders())},body:JSON.stringify({address})});
     const live=await response.json().catch(()=>null);
-    if(!response.ok)throw new Error(live?.error||'arc_rpc_unavailable');
-    if(!live)throw new Error('arc_rpc_unavailable');
-    $('app').classList.remove('awaiting-live-scan','has-live-report');$('live-report').hidden=true;
+  if(!response.ok){const failure=new Error(live?.error||'arc_rpc_unavailable');failure.retryAfter=live?.retryAfter;throw failure;}
+  if(!live)throw new Error('arc_rpc_unavailable');
+  $('app').classList.remove('awaiting-live-scan','has-live-report');$('live-report').hidden=true;
+
     $('gate').hidden=true;mode='contract';started=true;pause();chipSig='';
     setupContract(live);cPanelOpen=!mobile;selected=null;setModeUI();hidePanel();updateAll();cPanelOpen=false;openSimple();
-  }catch(error){toast(scanErrorMessage(error instanceof Error?error.message:'arc_rpc_unavailable'));}
+  }catch(error){const detail=error instanceof Error?error:null;toast(scanErrorMessage(detail?.message,detail?.retryAfter));}
   finally{$('scanC').disabled=false;}
 }));
 function renderKey(){
