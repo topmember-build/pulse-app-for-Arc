@@ -44,8 +44,8 @@
   <div id="gate">
     <div class="card">
       <div class="gatebar"><span class="gmark"><svg width="30" height="16" viewBox="0 0 30 16" aria-hidden="true"><polyline points="0,9 8,9 10,6 13,14 16,1 19,11 21,9 30,9" fill="none" stroke="#ff5a45" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>Pulse</span><div class="gate-actions"><button class="btn small" id="gateHistory">History</button><button class="btn small" id="gateAcct">Connect</button></div></div>
-      <h1>Scan anything on Arc</h1>
-      <p>Inspect live Arc token transfers and scan smart contracts before you interact with them.</p>
+      <h1>Scan anything on Arc Mainnet</h1>
+      <p>Inspect recent token transfers and basic contract facts before you interact.</p>
       <div class="seg" role="tablist" aria-label="Scan type">
         <button role="tab" id="tabT" aria-selected="true">Token</button>
         <button role="tab" id="tabC" aria-selected="false">Contract</button>
@@ -60,7 +60,7 @@
         <input id="contractAddr" placeholder="0x…" inputmode="text" autocomplete="off">
         <button class="btn primary full" id="scanC">Scan live contract</button>
       </div>
-      <small>Wallet connection is required to scan. Token results analyze the latest Arc Mainnet transfer window. Scans are free in this beta; payment settlement is not enabled.</small>
+      <small>Wallet connection is required. Token scans inspect up to 500 recent Arc Mainnet blocks; contract scans check bytecode and native USDC balance only. Scans are free in this beta; payment settlement is not enabled.</small>
     </div>
   </div>
 
@@ -100,15 +100,15 @@
 
   <header class="L-hero">
     <div class="L-copy">
-      <h1>Check a token or contract on Arc before you trust it.</h1>
-      <p class="L-lead">Pulse turns live Arc data into a plain-language review. Token scans summarize recent ERC-20 Transfer events; contract scans report live bytecode presence. Every result shows what was checked—and what it cannot prove.</p>
+      <h1>Check a token or contract on Arc Mainnet before you trust it.</h1>
+      <p class="L-lead">Pulse turns live Arc Mainnet data into a plain-language review. Token scans summarize recent ERC-20 Transfer events; contract scans report runtime bytecode and native USDC balance. Every result shows what was checked—and what it cannot prove.</p>
       <div class="L-cta">
         <button class="L-btn" data-go="scan">Open the scanner</button>
         <button class="L-btn ghost" data-go="#L-anatomy">See how to read it</button>
       </div>
       <p class="L-fine">Wallet connection is powered by Privy. Scans are free during beta; payment settlement is not enabled.</p>
     </div>
-    <div class="L-art"><canvas id="L-hero" aria-label="A beating anatomical heart with a blue vein bringing money in and a red artery taking it out"></canvas></div>
+    <div class="L-art"><canvas id="L-hero" aria-label="Illustrative heart animation; its activity does not represent live blockchain data"></canvas></div>
   </header>
 
   <section class="L-sec rv" id="L-problem">
@@ -139,7 +139,7 @@
     </div>
     <div class="L-scan">
       <div><h4>Tokens</h4><p>Review recent mint and transfer patterns from live Arc Transfer events, with the scanned block range shown.</p></div>
-      <div><h4>Contracts</h4><p>See whether runtime bytecode exists on Arc Mainnet. Privileged-role and sellability analysis is not enabled yet.</p></div>
+      <div><h4>Contracts</h4><p>Check runtime bytecode and native USDC balance on Arc Mainnet. Source, permissions, transaction history, and sellability analysis are not enabled yet.</p></div>
       <div><h4>Wallets <em>planned</em></h4><p>Whales, the most active wallets and unusual behavior, on the same heart.</p></div>
     </div>
   </section>

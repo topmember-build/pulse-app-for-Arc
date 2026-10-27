@@ -217,7 +217,7 @@ function renderPanelT(){
   let h=`<button id="px" aria-label="Close details">×</button><h2>${NAMES[id]}</h2><p class="kind">${KIND_LABEL[kind]}</p>`;
   if(id==='P'){
     const tb=IDS.reduce((a,k)=>a+s.usdBuy[k],0),ts=IDS.reduce((a,k)=>a+s.usdSell[k],0);
-    h+=`<div class="big">${fmtPct(share)}<span>of supply still in the pool</span></div><dl><dt>Bought from the pool</dt><dd>${fmtUsd(tb)}</dd><dt>Paid out to sellers</dt><dd>${fmtUsd(ts)}</dd><dt>Transfers so far</dt><dd>${SIM.tcCum[curB].toLocaleString('en-US')}</dd></dl><p class="note">The heart is the ${'liquidity pool'}. Buys arrive through the vena cava and sells leave through the aorta. It beats once per block.</p>`;
+    h+=`<div class="big">${fmtPct(share)}<span>of sample supply</span></div><dl><dt>Sample buys</dt><dd>${fmtUsd(tb)}</dd><dt>Sample sells</dt><dd>${fmtUsd(ts)}</dd><dt>Sample transfers</dt><dd>${SIM.tcCum[curB].toLocaleString('en-US')}</dd></dl><p class="note">This is a synthetic token replay. Its activity and sample blocks are not fetched from Arc Mainnet.</p>`;
   }else{
     h+=`<div class="big">${fmtPct(share)}<span>of supply</span></div><dl>`;
     h+=`<dt>${kind==='diffuse'?'Holders':'Wallets'}</dt><dd>${s.wallets[id]}</dd>`;
@@ -826,7 +826,7 @@ let tour=null;const tourSeen={token:false,contract:false};
 const hr=()=>heartGeom();
 const TOURS={
  token:[
-  {t:'This heart is the token\'s pool of money. It beats once every time Arc adds a new block.',ring:()=>{const h=hr();return {x:h.cx,y:h.cy,r:1.35*h.u};}},
+  {t:'This is a synthetic token replay. Its sample blocks and transfers are not fetched from Arc Mainnet.',ring:()=>{const h=hr();return {x:h.cx,y:h.cy,r:1.35*h.u};}},
   {t:'Money coming in through this blue vein is people buying the token.',ring:()=>{const h=hr();return {x:h.inflow[0],y:h.inflow[1],r:30*S};}},
   {t:'Money leaving through this red artery is people selling.',ring:()=>{const h=hr();return {x:h.outflow[0],y:h.outflow[1],r:30*S};}},
   {t:'Each bubble is a group of wallets and each dot is one wallet. Wallets funded by the same source that act in step are grouped, because they may belong to one person.',ring:()=>{const d=disp.A;return {x:d.x,y:d.y,r:d.r*1.6+8};}},
@@ -989,12 +989,12 @@ $('scanC').addEventListener('click',()=>requireWallet(async()=>{
 function renderKey(){
   const sw=(bg,border)=>`<span class="sw" style="${bg?'background:'+bg:''}${border?';border:1.5px '+border:''}"></span>`;
   $('key').innerHTML=mode==='token'?`
-<p>${sw('#a3203a')}<span>Heart: the liquidity pool. One beat is one block.</span></p>
-<p>${sw('#3d5f9e')}<span>Blue vessels are veins: buys flowing into the pool.</span></p>
-<p>${sw('#a3222f')}<span>Red vessels are arteries: sells flowing out of the pool.</span></p>
-<p>${sw('',`solid rgb(${BONE})`)}<span>Wallet groups. Size is share of supply, dots are wallets. Dashed means maybe connected.</span></p>
-<p>${sw(`rgb(${BONE})`)}<span>Pale vessels: transfers between wallets. Thicker means more USDC.</span></p>
-<p>${sw(`rgb(${AMBER})`)}<span>Amber: a risk signal, with the evidence behind it.</span></p>`:`
+<p>${sw('#a3203a')}<span>Illustrative sample token demo. One beat represents a sample block.</span></p>
+<p>${sw('#3d5f9e')}<span>Blue veins represent sample buys flowing into the pool.</span></p>
+<p>${sw('#a3222f')}<span>Red arteries represent sample sells flowing out of the pool.</span></p>
+<p>${sw('',`solid rgb(${BONE})`)}<span>Sample wallet groups. Sizes and connections are synthetic.</span></p>
+<p>${sw(`rgb(${BONE})`)}<span>Pale vessels represent sample transfers between wallets.</span></p>
+<p>${sw(`rgb(${AMBER})`)}<span>Amber marks a sample risk signal, not a live finding.</span></p>`:`
 <p>${sw('#a3203a')}<span>Heart: the scanned contract. This scan does not visualize transaction activity.</span></p>
 <p>${sw('#3d5f9e')}<span>Transaction activity is not included in this contract scan.</span></p>
 <p>${sw('#ff5a45')}<span>Admin powers appear only when a scan has evidence for them.</span></p>

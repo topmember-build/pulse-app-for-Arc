@@ -92,10 +92,10 @@ function drawHero(canvas,t){
   const m1=bez(va,vc,inflow,.5),m2=bez(outflow,rc,ra,.55);
   note(m1[0],m1[1],w*.03,h*.09,'Blue: money coming in','left');
   note(m2[0],m2[1],w*.97,h*.09,'Red: money going out','right');
-  note(cx+.9*u,cy+.6*u,w*.97,h*.94,'One beat for every Arc block','right');
+  note(cx+.9*u,cy+.6*u,w*.97,h*.94,'Illustrative sample activity','right');
 }
 const PARTS=[
- ['heart','The heart','The token\'s pool of money, or the contract itself. It beats once for every new block on Arc, so you are watching in real time.'],
+ ['heart','The heart','This is an illustrative visualization, not a live feed. The token replay uses synthetic sample blocks and is not synced to Arc Mainnet.'],
  ['veins','Blue veins','Money coming in: people buying a token or depositing into a contract.'],
  ['arteries','Red arteries','Money going out: people selling or withdrawing. If sells stall partway down, you will see them stop.'],
  ['groups','Wallet groups','Each bubble is a group of wallets and each dot is one wallet. Wallets funded by the same source that move together are grouped. Dashed means we are less sure.'],
