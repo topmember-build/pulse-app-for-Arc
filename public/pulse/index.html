@@ -8,21 +8,21 @@
 </head>
 <body>
 <div id="app" class="awaiting-live-scan">
-  <canvas id="stage" role="img" aria-label="Animated map drawn as an anatomical heart with veins and arteries carrying onchain transactions"></canvas>
+  <canvas id="stage" role="img" aria-label="Illustrative token animation using synthetic sample data; it does not show live Arc transactions"></canvas>
 
   <header id="hud">
     <div class="row">
       <div>
-        <div id="tokname">ORBT</div>
-        <div class="sub" id="subline">Arc testnet · live evidence view</div>
+        <div id="tokname">DEMO</div>
+        <div class="sub" id="subline">Illustrative sample · not live Arc data</div>
       </div>
       <div id="linked">
-        <div id="linkedNum">0.0%</div>
-        <div id="linkedLbl">held by wallets that look connected</div>
+        <div id="linkedNum">—</div>
+        <div id="linkedLbl">Sample metric · not a live scan</div>
         <div id="possNum"></div>
       </div>
     </div>
-    <div id="signals" aria-label="Signals found so far"></div>
+    <div id="signals" aria-label="Sample signals from synthetic data"></div>
   </header>
 
   <aside id="panel" hidden></aside>
@@ -35,10 +35,10 @@
       <button class="btn" id="sumbtn">Summary</button>
       <button class="btn" id="findbtn" hidden>Findings</button>
       <button class="btn" id="morebtn" aria-haspopup="menu" aria-expanded="false">More</button>
-      <span id="clock">Launch +0 blocks</span>
+      <span id="clock">Sample playback · not live block data</span>
     </div>
-    <canvas id="ecg" aria-label="Activity strip"></canvas>
-    <div id="dotnote">Drag the strip to move through time.</div>
+    <canvas id="ecg" aria-label="Synthetic sample activity strip"></canvas>
+    <div id="dotnote">Illustrative animation; no live chain activity.</div>
   </footer>
 
   <div id="gate">
@@ -58,11 +58,9 @@
       <div id="paneC" hidden>
         <label for="contractAddr">Contract address</label>
         <input id="contractAddr" placeholder="0x…" inputmode="text" autocomplete="off">
-        <label>Or pick a sample contract</label>
-        <div id="samples"></div>
         <button class="btn primary full" id="scanC">Scan live contract</button>
       </div>
-      <small>Wallet connection is required to scan. Token results analyze the latest Arc testnet transfer window. Scans are free in this beta; payment settlement is not enabled.</small>
+      <small>Wallet connection is required to scan. Token results analyze the latest Arc Mainnet transfer window. Scans are free in this beta; payment settlement is not enabled.</small>
     </div>
   </div>
 
@@ -135,20 +133,20 @@
   <section class="L-sec rv" id="L-steps">
     <h2>Three steps, no expertise needed.</h2>
     <div class="L-steps">
-      <div><span class="n">1</span><h3>Connect and scan</h3><p>Connect a wallet through Privy, then scan a token or contract on Arc testnet. Scans are free while payment settlement is disabled.</p></div>
+      <div><span class="n">1</span><h3>Connect and scan</h3><p>Connect a wallet through Privy, then scan a token or contract on Arc Mainnet. Scans are free while payment settlement is disabled.</p></div>
       <div><span class="n">2</span><h3>Review the evidence</h3><p>Read the scanned block range, event-derived metrics, and any rule-based transfer flags. Unfamiliar terms explain themselves when you tap them.</p></div>
       <div><span class="n">3</span><h3>Open the events</h3><p>Inspect the latest Transfer entries with their block, sender, recipient, amount, and transaction hash.</p></div>
     </div>
     <div class="L-scan">
       <div><h4>Tokens</h4><p>Review recent mint and transfer patterns from live Arc Transfer events, with the scanned block range shown.</p></div>
-      <div><h4>Contracts</h4><p>See whether runtime bytecode exists on Arc testnet. Privileged-role and sellability analysis is not enabled yet.</p></div>
+      <div><h4>Contracts</h4><p>See whether runtime bytecode exists on Arc Mainnet. Privileged-role and sellability analysis is not enabled yet.</p></div>
       <div><h4>Wallets <em>planned</em></h4><p>Whales, the most active wallets and unusual behavior, on the same heart.</p></div>
     </div>
   </section>
 
   <section class="L-sec rv" id="L-result">
-    <h2>What a result looks like.</h2>
-    <p class="L-sub">Three sample contracts. Pick one.</p>
+    <h2>Illustrative risk scenarios.</h2>
+    <p class="L-sub">Synthetic examples only—not live Arc Mainnet scans. A real scan uses evidence returned for the address you enter.</p>
     <div class="L-tabs" role="tablist" id="L-tabs"></div>
     <div class="L-verdict" id="L-verdict" aria-live="polite"></div>
   </section>
@@ -156,13 +154,13 @@
   <section class="L-sec rv" id="L-price">
     <div class="L-pricegrid">
       <div>
-        <h2>Free scans during the testnet beta.</h2>
-        <p class="L-sub">No payment is requested while Arc testnet settlement is being configured.</p>
+        <h2>Free scans during this beta.</h2>
+        <p class="L-sub">Scans are free during this beta; payment settlement is not enabled.</p>
       </div>
       <div class="L-price"><span class="amt">Free</span><span class="unit">during beta</span><span class="tag">no payment enabled</span></div>
     </div>
     <ul class="L-list">
-      <li>Built for Arc testnet; each live scan reads public chain data and costs nothing during this beta.</li>
+      <li>Built for Arc Mainnet; each live scan reads public chain data and costs nothing during this beta.</li>
       <li>Connect an existing wallet or use a Privy embedded wallet. Pulse never asks for your recovery phrase.</li>
       <li>Scan history is limited to the authenticated Privy account and wallet linked to that account.</li>
       <li>Planned: configurable USDC settlement and a scan API for apps and AI agents.</li>
@@ -175,22 +173,22 @@
       <li><strong>It cannot prove anything is safe.</strong> A clean result means we found no red flags, not that none exist.</li>
       <li><strong>Recent transfer patterns are not holder balances.</strong> Token scans only report the observed Arc block window; they do not infer current ownership.</li>
       <li><strong>This is not financial advice.</strong> Never put in money you cannot afford to lose.</li>
-      <li><strong>Arc testnet only.</strong> Wallet connection uses Privy; scan payments are disabled during this beta.</li>
+      <li><strong>Arc Mainnet only.</strong> Wallet connection uses Privy; scan payments are disabled during this beta.</li>
     </ul>
   </section>
 
   <section class="L-sec rv" id="L-faq">
     <h2>Questions people ask.</h2>
     <details><summary>Why a heart?</summary><p>The heart is Pulse's visual metaphor for onchain activity. Token results list the live Transfer events and exact recent block range they analyze; they do not assume every transfer went through a known liquidity pool.</p></details>
-    <details><summary>Do scans cost anything?</summary><p>No. Token and contract scans are free during the Arc testnet beta. Payment settlement is not enabled, and the app will not request a deposit or scan payment. Pulse never asks for a seed phrase.</p></details>
+    <details><summary>Do scans cost anything?</summary><p>No. Token and contract scans are free during the Arc Mainnet beta. Payment settlement is not enabled, and the app will not request a deposit or scan payment. Pulse never asks for a seed phrase.</p></details>
     <details><summary>Which chain does it support?</summary><p>Arc only. Staying on one chain lets us label Arc's contracts and launchpads properly instead of guessing.</p></details>
-    <details><summary>Is this finished?</summary><p>This is an Arc testnet beta with Privy wallet connection and live RPC reads. Token analysis covers only the latest 500 blocks; contract scans currently check basic runtime facts. Payment settlement and deeper security analysis are not enabled.</p></details>
+    <details><summary>Is this finished?</summary><p>This is an Arc Mainnet beta with Privy wallet connection and live RPC reads. Token analysis covers only the latest 500 blocks; contract scans currently check basic runtime facts. Payment settlement and deeper security analysis are not enabled.</p></details>
   </section>
 
   <section class="L-final rv">
     <h2>See it beat.</h2>
     <button class="L-btn" data-go="scan">Open the scanner</button>
-    <p class="L-fine">Arc testnet · wallet connection via Privy · not financial advice</p>
+    <p class="L-fine">Arc Mainnet · wallet connection via Privy · not financial advice</p>
   </section>
 </div>
 

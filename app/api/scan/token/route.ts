@@ -5,11 +5,11 @@ import { checkRateLimit } from '@/lib/rate-limit'
 import { getVerifiedPrivyWallet, WalletAuthError } from '@/lib/privy-auth'
 import { analyzeTokenTransfers, formatTokenAmount, TransferEvidence } from '@/lib/token-analysis'
 import { tokenScanRequestSchema, tokenScanSchema } from '@/lib/schemas'
+import { ARC_CHAIN_ID, ARC_NETWORK_NAME } from '@/lib/arc-network'
+import { ARC_RPC_URL } from '@/lib/arc-rpc'
 
 export const runtime = 'nodejs'
 
-const RPC = process.env.ARC_RPC_URL ?? 'https://rpc.testnet.arc.network'
-const ARC_CHAIN_ID = 5042002
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 const MAX_ANALYZED_EVENTS = 10_000
 
@@ -34,7 +34,7 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 async function rpc(method: string, params: unknown[]): Promise<unknown> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      const result = await fetch(RPC, {
+      const result = await fetch(ARC_RPC_URL, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: randomUUID(), method, params }),
@@ -51,7 +51,7 @@ async function rpc(method: string, params: unknown[]): Promise<unknown> {
 
       const payload = await result.json() as RpcResponse
       if (payload.error) {
-        const retryable = [-32005, -32016, -32603].includes(payload.error.code ?? 0)
+        const retryable = [-32005, -32014, -32016, -32603].includes(payload.error.code ?? 0)
         if (attempt < 2 && retryable) {
           await delay(150 * (attempt + 1))
           continue
@@ -251,7 +251,7 @@ export async function POST(request: Request) {
         decimals,
         totalSupply,
       },
-      network: { name: 'Arc Testnet', chainId: ARC_CHAIN_ID },
+      network: { name: ARC_NETWORK_NAME, chainId: ARC_CHAIN_ID },
       ...analysis,
       scannedAt: new Date().toISOString(),
     })

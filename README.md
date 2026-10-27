@@ -1,40 +1,38 @@
 # Pulse for Arc
 
-Pulse is a production-oriented smart-contract intelligence interface for Arc. It turns a contract address into an explainable visual report: deployment status, runtime bytecode, balance, risk signals, and the limits of what the scan can prove.
+Pulse is an Arc Mainnet beta scanner that turns token and contract addresses into evidence-focused reports, with scan coverage and limitations made explicit.
 
-The project combines a polished static scanner experience with a Next.js App Router backend. Privy handles wallet connection and embedded-wallet onboarding. Arc testnet RPC powers live contract inspection. Payment settlement is intentionally kept separate so it can be completed and audited in Arc Studio without coupling the scanner to unfinished payment logic.
+The Next.js App Router backend uses Privy for wallet authentication and Arc Mainnet JSON-RPC for read-only scans. It defaults to the official public endpoint, verifies chain ID 5042, and accepts an optional server-side `ARC_RPC_URL` override. Payment settlement is not enabled.
 
 ## Product status
 
-**Current milestone: wallet and live RPC foundation.**
+**Current milestone: Arc Mainnet read-only scanning beta.**
 
 Implemented:
 
-- Privy wallet and email login entry points.
-- Privy embedded-wallet configuration for Ethereum-compatible networks.
-- Account synchronization between the Privy provider and the Pulse scanner UI.
-- Sign-out propagation from Privy back into the scanner.
-- Live contract scan endpoint backed by JSON-RPC calls.
-- Contract-address input for live scans.
-- Arc testnet-oriented configuration seam.
-- Responsive dark interface with animated visualization and accessible controls.
+- Privy wallet/email login with server-side wallet verification.
+- Arc Mainnet token scans for metadata and ERC-20 Transfer events in the latest 500-block window, with rule-based transfer flags.
+- Arc Mainnet contract checks for runtime bytecode and native USDC balance.
+- Authenticated scan history, route-level rate limits, and a database/RPC health check.
+- Mainnet chain-ID verification and structured request logging.
+- The live scanner is separate from the synthetic token replay and illustrative landing-page scenarios.
 
-Not yet included in this repository:
+Not yet included:
 
-- USDC payment construction, settlement, or payment verification.
-- A production token-analysis engine beyond the current visual/sample token experience.
-- Persistent user accounts, scan history, or analytics storage.
-- Rate limiting, abuse prevention, and production observability.
+- Full historical indexing, current token-holder balances, liquidity, honeypot, and sellability analysis.
+- Contract source verification, ownership/role/proxy analysis, and transaction or failed-call history.
+- USDC payment creation, settlement, and payment verification.
+- A dedicated RPC service with production quotas/SLAs, external error monitoring, and broad automated integration/security tests.
 
-Do not describe the application as fully production-ready until those remaining systems have been implemented and tested on the target Arc environment.
+The animated token replay and landing-page risk scenarios are synthetic examples, not Mainnet evidence. Do not describe the application as fully production-ready until the remaining analysis, operational, and security work has been implemented and tested.
 
 ## Repository layout
 
 ```text
 app/
-  api/health/route.ts          Health check endpoint
+  api/health/route.ts          Database and Arc Mainnet RPC health check
   api/scan/contract/route.ts   Live contract RPC scan endpoint
-  api/scan/token/route.ts      Token scan API seam
+  api/scan/token/route.ts      Live ERC-20 transfer scan endpoint
   layout.tsx                   Root metadata and Privy provider shell
   page.tsx                     Next.js entry page
   privy-provider.tsx           Privy client integration and wallet bridge
@@ -44,12 +42,14 @@ public/pulse/
   style.css                    Visual system and responsive styles
   js/app.js                    Scanner state, controls, and account bridge
   js/config.js                 Client-side scanner configuration
-  js/contracts.js              Contract visualization helpers
+  js/contracts.js              Contract finding weights and verdict labels
   js/heart.js                  Visualization renderer
-  js/landing.js                Landing-page behavior
-  js/sim.js                    Token visualization data and playback
+  js/landing.js                Landing-page behavior and illustrative examples
+  js/sim.js                    Synthetic token demo playback data
 
 lib/
+  arc-network.ts               Shared Arc Mainnet constants
+  arc-rpc.ts                   Server-side RPC endpoint override
   env.ts                       Server environment validation
   schemas.ts                   API request and response schemas
 ```
@@ -59,7 +59,7 @@ lib/
 - Node.js 20 or newer.
 - pnpm 12.3.4, as declared by `packageManager`.
 - A Privy application for wallet login.
-- An Arc-compatible JSON-RPC endpoint for live contract scans.
+- Arc Mainnet JSON-RPC; the official public endpoint is the default, with an optional `ARC_RPC_URL` override.
 
 ## Local development
 
@@ -103,14 +103,13 @@ PRIVY_APP_SECRET=your_server_only_privy_secret
 
 `NEXT_PUBLIC_PRIVY_APP_ID` is safe to expose to the browser. `PRIVY_APP_SECRET` must remain server-only and should never be placed in client code, logs, or the repository.
 
-### Required for live Arc scans
+### Optional Arc Mainnet RPC override
 
 ```env
-ARC_RPC_URL=https://your-arc-testnet-rpc.example
-ARC_CHAIN_ID=your_arc_testnet_chain_id
+ARC_RPC_URL=https://rpc.mainnet.arc.io
 ```
 
-`ARC_RPC_URL` is used by the server route, not directly by the browser. Keep RPC access behind the route so validation, timeouts, logging, and rate limits can be added in one place.
+If omitted, server routes use the official Arc Mainnet public RPC. The shared network configuration verifies chain ID `5042`; an override must point to Arc Mainnet. RPC access stays server-side so validation, timeouts, logging, and rate limits remain centralized.
 
 ### Optional application configuration
 
@@ -148,28 +147,7 @@ Request:
 }
 ```
 
-The route validates the address, then queries the configured RPC for:
-
-- `eth_chainId`
-- `eth_getCode`
-- `eth_getBalance`
-
-Successful responses include the normalized address, chain ID, deployment status, runtime bytecode size, native balance, block number, and a small set of explainable findings.
-
-Example response shape:
-
-```json
-{
-  "address": "0x...",
-  "chainId": "0x...",
-  "chain": "arc-testnet",
-  "deployed": true,
-  "runtimeBytecodeBytes": 1234,
-  "nativeBalanceWei": "0",
-  "blockNumber": "0x...",
-  "findings": []
-}
-```
+The route verifies the Privy wallet and applies rate limits, then checks the configured RPC chain ID and queries `eth_getCode` and `eth_getBalance` at the latest state. Responses include the address, Arc Mainnet label, runtime bytecode size, native USDC balance, and a limited finding. The contract endpoint does not fetch a block number or transaction history.
 
 A successful RPC read is not a complete security audit. It does not prove source correctness, ownership safety, upgradeability safety, liquidity, sellability, or economic safety. Those checks should be added as separate, explicitly labeled analysis stages.
 
@@ -193,15 +171,15 @@ Never unlock a paid scan from a browser-only success callback. Never trust an am
 Before public production launch:
 
 - Set exact Privy allowed origins for local, preview, and production environments.
-- Configure and verify the Arc testnet chain ID and RPC endpoint.
-- Add RPC timeouts, bounded retries, and structured error responses.
-- Add server-side payment verification before scan execution.
-- Add per-user and per-IP rate limiting.
-- Add request IDs and error monitoring without logging secrets or wallet credentials.
+- Verify the configured endpoint reports Arc Mainnet chain ID `5042` in every deployment environment; choose a dedicated RPC provider and quotas for sustained traffic.
+- Exercise timeout, retry, wrong-chain, and unavailable-provider behavior.
+- Implement server-side payment verification before enabling scan charges.
+- Validate the current route limits against per-user and per-IP abuse scenarios.
+- Connect request-ID logs to external error monitoring without logging secrets or wallet credentials.
 - Validate and normalize every contract address server-side.
 - Keep all provider secrets in deployment environment variables.
 - Add automated tests for invalid addresses, RPC failures, unavailable contracts, and payment replay.
-- Add a clear network indicator so users cannot confuse testnet with mainnet.
+- Keep Arc Mainnet and synthetic-demo labels explicit so sample visuals are never mistaken for live evidence.
 - Review Privy and Arc terms, quotas, and operational limits before launch.
 
 ## Deployment

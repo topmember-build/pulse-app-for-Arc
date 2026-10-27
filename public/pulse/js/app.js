@@ -45,7 +45,7 @@ const hex=n=>Array.from({length:n},()=>'0123456789abcdef'[Math.floor(Math.random
 const addrOf=id=>(mode==='token'?ADDR[id]:null)||('0x'+hex(4)+'…'+hex(4));
 const fmtPct=x=>x.toFixed(1)+'%';
 const fmtUsd=x=>'$'+Math.round(x).toLocaleString('en-US');
-const nameOf=id=>mode==='token'?NAMES[id]:({USR:'Recent users',P:C.name,OWN:'Admin wallet',TOP:C.top?C.top.label:''}[id]||id);
+const nameOf=id=>mode==='token'?NAMES[id]:({USR:'Recent activity',P:C.name,OWN:'Admin identity',TOP:C.top?C.top.label:''}[id]||id);
 
 
 /* ---------- plain-language helpers ---------- */
@@ -154,11 +154,8 @@ function pause(){playing=false;syncPlay();}
 
 /* ---------- contract mode: live beats ---------- */
 function setupContract(c){
-  C=c;cScore=scoreOf(c);particles=[];cBeats=[];cNext=simTime+.3;cFlash=null;selected=null;
-  CEDGES=[
-    {a:'USR',b:'P',lane:'in',c:.1},
-    {a:'P',b:'USR',lane:'out',c:-.1}
-  ];
+  C=c;cScore=scoreOf(c);particles=[];cBeats=[];cNext=Number.POSITIVE_INFINITY;cFlash=null;selected=null;beatAmp=0;beatAt=-10;
+  CEDGES=[];
   c.powers.forEach((p,i)=>CEDGES.push({a:'P',b:'OWN',lane:'pow',c:-.34+i*.2,power:p,t:.3+i*.13}));
   if(c.top)CEDGES.push({a:'TOP',b:'P',lane:'plain',c:.1});
   CEP=CEDGES.map(()=>null);
@@ -183,16 +180,16 @@ function updateHud(){
     $('linkedNum').textContent=fmtPct(likely);$('linkedNum').style.color='';
     $('linkedLbl').textContent='held by wallets that look connected';
     $('possNum').textContent=poss>0?`+ ${fmtPct(poss)} maybe connected`:'';
-    $('clock').textContent=`Launch +${curB} blocks`;
+    $('clock').textContent=`Sample launch +${curB} blocks`;
     const ratio=SIM.pcCum[curB]?SIM.tcCum[curB]/SIM.pcCum[curB]:1;
-    $('dotnote').textContent=(ratio>1.05?`1 dot ≈ ${ratio.toFixed(1)} transfers. `:'1 dot = 1 transfer. ')+'The strip shows transactions per block. Drag it to move through time.';
+    $('dotnote').textContent=(ratio>1.05?`1 dot ≈ ${ratio.toFixed(1)} transfers. `:'1 dot = 1 transfer. ')+'Synthetic sample transactions per block. Drag the strip to move through the demo.';
   }else{
     const v=verdictOf(cScore);
-    $('linkedNum').textContent=cScore;$('linkedNum').style.color=v.color;
+    $('linkedNum').textContent=cScore?String(cScore):'—';$('linkedNum').style.color=v.color;
     $('linkedLbl').textContent=v.label;
-    $('possNum').textContent='Risk score, 0 to 100';
-    $('clock').textContent='Live evidence · Arc testnet';
-    $('dotnote').textContent='Each beat is a batch of calls to this contract. Amber ticks mark sells that failed.';
+    $('possNum').textContent='Observed signal score; not a safety rating';
+    $('clock').textContent='RPC snapshot · Arc Mainnet';
+    $('dotnote').textContent='Activity, ownership, and permissions are not analyzed in this snapshot.';
   }
 }
 function renderChips(){
@@ -203,7 +200,7 @@ function renderChips(){
   }else{
     const sig='c'+C.id;if(sig===chipSig)return;chipSig=sig;
     const items=C.findings.map((f,i)=>({f,i})).filter(x=>x.f.sev==='high'||x.f.sev==='med');
-    $('signals').innerHTML=items.length?items.map(x=>`<button class="chip ${x.f.sev}" data-fi="${x.i}"><i></i>${x.f.short}</button>`).join(''):`<span class="none">No major findings</span>`;
+    $('signals').innerHTML=items.length?items.map(x=>`<button class="chip ${x.f.sev}" data-fi="${x.i}"><i></i>${x.f.short}</button>`).join(''):`<span class="none">Limited scan; no security verdict</span>`;
   }
 }
 function fundedBy(id){let n=0,u=0;for(let b=0;b<=curB;b++)for(const t of BLOCKS[b])if(t.from===id&&t.fresh){n+=t.fresh;u+=t.usd;}return {n,u};}
@@ -247,12 +244,12 @@ function renderPanelC(){
   if(selected&&selected!=='findings'){
     const id=selected;
     if(id==='P'){
-      h+=`<h2>${C.name}</h2><p class="kind">${C.kind} · ${C.addr}</p><dl>${C.facts.map(f=>`<dt>${f[0]}</dt><dd>${f[1]}</dd>`).join('')}</dl><p class="note">The heart is the contract. Users send funds in through the vena cava and take them out through the aorta. Vessels leaving toward the admin wallet are the powers the admin holds.</p>`;
+      h+=`<h2>${C.name}</h2><p class="kind">${C.kind} · ${C.addr}</p><dl>${C.facts.map(f=>`<dt>${f[0]}</dt><dd>${f[1]}</dd>`).join('')}</dl><p class="note">This RPC-only snapshot confirms runtime bytecode and native USDC balance. Activity, ownership, and permissions are not analyzed.</p>`;
     }else if(id==='OWN'){
-      h+=`<h2>Admin wallet</h2><p class="kind">${C.owner.label}</p><dl><dt>Activity</dt><dd>${C.owner.last}</dd></dl><h3>What it can do</h3><ul>${C.powers.map(p=>`<li><span class="sev ${p.sev}">${SEV_LABEL[p.sev]}</span><span>${p.label}<small>${p.guard==='none'?'Takes effect immediately, '+p.guardLabel:'Held back by '+p.guardLabel}</small></span></li>`).join('')}</ul>`;
+      h+=`<h2>Admin identity</h2><p class="kind">${C.owner.label}</p><dl><dt>Activity</dt><dd>${C.owner.last}</dd></dl>`;
+      h+=C.powers.length?`<h3>Detected powers</h3><ul>${C.powers.map(p=>`<li><span class="sev ${p.sev}">${SEV_LABEL[p.sev]}</span><span>${p.label}<small>${p.guard==='none'?'Takes effect immediately, '+p.guardLabel:'Held back by '+p.guardLabel}</small></span></li>`).join('')}</ul>`:'<p class="note">Admin identity and permissions are not analyzed in this scan.</p>';
     }else if(id==='USR'){
-      const f=C.flow;
-      h+=`<h2>Recent users</h2><p class="kind">Wallets that called the contract in the last blocks</p><dl><dt>Deposits and buys</dt><dd>Going through</dd><dt>Sells and withdrawals</dt><dd>${f.fail>0.5?'Almost all fail':'Going through'}</dd></dl>${f.fail>0.5?'<p class="note">Dark marks on the red vessel are sells that reverted in the simulation. Users can put money in but not take it out.</p>':''}`;
+      h+='<h2>Recent activity</h2><p class="kind">Transaction history is not included in this RPC-only contract scan.</p>';
     }else if(id==='TOP'){
       h+=`<h2>${C.top.label}</h2><p class="kind">Largest holders of the token</p><div class="big">${C.top.share}%<span>of supply</span></div><p class="note">High concentration means a few wallets can move the price or exit at once.</p>`;
     }
@@ -260,7 +257,7 @@ function renderPanelC(){
   }else{
     const v=verdictOf(cScore);
     const sorted=C.findings.map((f,i)=>({f,i})).sort((a,b)=>SEV_ORDER[a.f.sev]-SEV_ORDER[b.f.sev]);
-    h+=`<h2>${C.name}</h2><p class="kind">${C.kind} · ${C.addr}</p><div class="verdict" style="color:${v.color}">${v.action}</div><p class="kind" style="margin-bottom:6px">${T(C.headline)}</p><h3>Everything we found</h3><ul>${sorted.map(x=>`<li class="fl"><button class="fb" data-fi="${x.i}" aria-label="Show this on the map: ${x.f.short}"><span class="sev ${x.f.sev}">${SEV_LABEL[x.f.sev]}</span><span><strong>${T(x.f.plain)}</strong></span></button><details><summary>Technical detail</summary><div><strong>${x.f.title}.</strong> ${T(x.f.detail)}<br><code>${x.f.where}</code></div></details></li>`).join('')}</ul><p class="note">The score combines live RPC findings. This first pass confirms deployment and runtime bytecode; deeper ownership, storage, source verification, and sell simulation are separate checks.</p>`;
+    h+=`<h2>${C.name}</h2><p class="kind">${C.kind} · ${C.addr}</p><div class="verdict" style="color:${v.color}">${v.action}</div><p class="kind" style="margin-bottom:6px">${T(C.headline)}</p><h3>Everything we found</h3><ul>${sorted.map(x=>`<li class="fl"><button class="fb" data-fi="${x.i}" aria-label="Show this on the map: ${x.f.short}"><span class="sev ${x.f.sev}">${SEV_LABEL[x.f.sev]}</span><span><strong>${T(x.f.plain)}</strong></span></button><details><summary>Technical detail</summary><div><strong>${x.f.title}.</strong> ${T(x.f.detail)}<br><code>${x.f.where}</code></div></details></li>`).join('')}</ul><p class="note">This first pass checks live runtime bytecode and native USDC balance only. Ownership, storage, source verification, transaction history, liquidity, and sellability are not analyzed.</p>`;
   }
   setPanel(h);
 }
@@ -481,8 +478,9 @@ function drawContract(dt){
   drawParticles(CEDGES,CEP,E=>{if(!flashOn||!cFlash.power)return 1;return E.lane==='pow'&&E.power.id===cFlash.power?1:.4;});
   // admin, users, top holders
   const o=C.owner;
-  drawOrgan(cn.OWN,{name:'Admin wallet',sub:o.type==='multisig'?'Multisig 3 of 5':'Single wallet',dash:o.type==='multisig'?[5*S,4*S]:[],alpha:.9,dots:o.dots,lit:o.lit,dotAlpha:.9,sel:selected==='OWN'});
-  drawOrgan(cn.USR,{name:'Recent users',sub:'',dash:[1.5,4],alpha:.6,dots:30,dotAlpha:.4,small:true,sel:selected==='USR'});
+  const ownerSummary=o.type==='multisig'?'Multisig':o.type==='eoa'?'Single wallet':'Not analyzed';
+  drawOrgan(cn.OWN,{name:'Admin identity',sub:ownerSummary,dash:o.type==='multisig'?[5*S,4*S]:[],alpha:.9,dots:o.dots,lit:o.lit,dotAlpha:.9,sel:selected==='OWN'});
+  drawOrgan(cn.USR,{name:'Recent activity',sub:'Not analyzed',dash:[1.5,4],alpha:.6,dots:0,dotAlpha:.4,small:true,sel:selected==='USR'});
   if(C.top)drawOrgan(cn.TOP,{name:C.top.label,sub:C.top.share+'% of supply',dash:[5*S,4*S],alpha:.85,dots:C.top.dots,dotAlpha:.9,sel:selected==='TOP'});
   drawHeartAt(Hg,C.name,'',selected==='P');
   // power labels sit on top so they stay readable
@@ -690,7 +688,7 @@ function showTokenReport(report){
   container.replaceChildren();
   const header=reportElement('header','report-head');
   const identity=reportElement('div');
-  identity.append(reportElement('div','report-brand','Pulse · Arc testnet'),reportElement('h1','report-title',report.token.name),reportElement('div','report-symbol',report.token.symbol+' · ERC-20 transfer evidence'));
+  identity.append(reportElement('div','report-brand','Pulse · Arc Mainnet'),reportElement('h1','report-title',report.token.name),reportElement('div','report-symbol',report.token.symbol+' · ERC-20 transfer evidence'));
   const copy=reportElement('code','report-copy',report.token.address);copy.title=report.token.address;
   const actions=reportElement('div','report-head-actions');
   const historyButton=reportElement('button','btn','History');historyButton.type='button';historyButton.addEventListener('click',openHistory);
@@ -770,7 +768,7 @@ function returnToScanner(address=''){
   $('addr').focus();
 }
 function scanErrorMessage(code,retryAfter){
-  const messages={invalid_input:'Enter a valid contract address.',not_a_contract:'No contract bytecode was found at that address on Arc testnet.',wrong_network:'The RPC endpoint is not connected to Arc testnet.',authentication_required:'Your Privy session expired. Sign in again to continue.',wallet_not_linked:'This wallet is not linked to the signed-in Privy account.',auth_unavailable:'Privy verification is temporarily unavailable. Try again shortly.',history_unavailable:'Scan history is temporarily unavailable. Try again shortly.',rate_limited:`Too many scans. Try again in ${retryAfter||60} seconds.`, service_unavailable:'A shared Pulse service is temporarily unavailable. Try again shortly.',arc_rpc_unavailable:'Arc testnet is temporarily unavailable. Try again shortly.'};
+  const messages={invalid_input:'Enter a valid contract address.',not_a_contract:'No contract bytecode was found at that address on Arc Mainnet.',wrong_network:'The RPC endpoint is not connected to Arc Mainnet.',authentication_required:'Your Privy session expired. Sign in again to continue.',wallet_not_linked:'This wallet is not linked to the signed-in Privy account.',auth_unavailable:'Privy verification is temporarily unavailable. Try again shortly.',history_unavailable:'Scan history is temporarily unavailable. Try again shortly.',rate_limited:`Too many scans. Try again in ${retryAfter||60} seconds.`, service_unavailable:'A shared Pulse service is temporarily unavailable. Try again shortly.',arc_rpc_unavailable:'Arc Mainnet is temporarily unavailable. Try again shortly.'};
   return messages[code]||'The scan could not be completed. Check the address and try again.';
 }
 
@@ -803,9 +801,9 @@ function contractSummary(){
   const list=C.findings.slice();
   const good=cScore<20;
   const pick=good?list.filter(f=>f.sev==='ok'):list.filter(f=>f.sev!=='ok'&&f.sev!=='info').sort((a,b)=>SEV_ORDER[a.sev]-SEV_ORDER[b.sev]);
-  return {action:v.action,color:v.color,headline:C.headline,whyTitle:good?'What looks good':'Why',
+  return {action:v.action,color:v.color,headline:C.headline,whyTitle:good?'What this scan checked':'Why',
     reasons:pick.slice(0,3).map(f=>({sev:f.sev,plain:f.plain})),
-    note:'No scan can prove something is safe, so keep amounts you cannot afford to lose out of anything you are unsure about. Simulated sample data.'};
+    note:'This RPC-only scan checks runtime bytecode and native USDC balance. It does not analyze source verification, admin permissions, liquidity, sellability, or exploitability; no scan proves a contract is safe.'};
 }
 function openSimple(){
   const d=mode==='token'?tokenSummary():contractSummary();
@@ -836,11 +834,11 @@ const TOURS={
   {t:'Press Play to watch the launch unfold, or drag the strip at the bottom to move through time.',dom:'#play'}
  ],
  contract:[
-  {t:'This heart is the contract, a program that holds and moves people\'s money. It beats each time people use it.',ring:()=>{const h=hr();return {x:h.cx,y:h.cy,r:1.35*h.u};}},
-  {t:'This is the admin wallet: the person or group who controls the contract.',ring:()=>{const d=cn.OWN;return {x:d.x,y:d.y,r:d.r*1.7+8};}},
-  {t:'Each vessel to the admin is something they are allowed to do. Red or amber means they can do it right away. Dashed with a valve means something holds them back.',ring:()=>{const r=cChipRects[0];return r?{x:r.x+r.w/2,y:r.y+r.h/2,r:Math.max(r.w,60)*.65}:null;}},
-  {t:'Blue is people putting money in and red is people taking it out. A cross on the red vessel is a sell that failed.',ring:()=>{const d=cn.USR;return {x:d.x,y:d.y,r:d.r*1.6+8};}},
-  {t:'The score and verdict summarise everything. Tap Findings for each reason in plain words.',dom:'#linked'}
+  {t:'This heart represents the contract. The live snapshot checks runtime bytecode and native USDC balance.',ring:()=>{const h=hr();return {x:h.cx,y:h.cy,r:1.35*h.u};}},
+  {t:'This scan does not infer who controls the contract; admin identity is not analyzed yet.',ring:()=>{const d=cn.OWN;return {x:d.x,y:d.y,r:d.r*1.7+8};}},
+  {t:'Admin permissions, timelocks, and upgrade controls are not analyzed by this scan yet.'},
+  {t:'This scan does not analyze recent users, deposits, withdrawals, or failed sells.',ring:()=>{const d=cn.USR;return {x:d.x,y:d.y,r:d.r*1.6+8};}},
+  {t:'The summary reflects only the limited RPC checks shown here; it is not a security rating.',dom:'#linked'}
  ]
 };
 let spotEl=null;
@@ -881,11 +879,6 @@ function drawTourRing(){
 }
 
 /* ---------- gate ---------- */
-let sampleId=CONTRACTS[1].id;
-function renderSamples(){
-  $('samples').innerHTML=CONTRACTS.map(c=>`<button class="sample" data-id="${c.id}" aria-pressed="${c.id===sampleId}">${c.name}<span>${c.kind} · ${c.addr}</span></button>`).join('');
-}
-$('samples').addEventListener('click',e=>{const b=e.target.closest('.sample');if(!b)return;sampleId=b.dataset.id;renderSamples();});
 function tab(which){
   const t=which==='token';
   $('tabT').setAttribute('aria-selected',t);$('tabC').setAttribute('aria-selected',!t);
@@ -896,9 +889,10 @@ $('tabC').addEventListener('click',()=>tab('contract'));
 function setModeUI(){
   const t=mode==='token';
   $('play').hidden=!t;$('speed').hidden=!t;$('findbtn').hidden=t;
+  ecg.hidden=!t;$('dotnote').hidden=!t;
   ecg.style.cursor=t?'ew-resize':'default';
-  $('tokname').textContent=t?'ORBT':C.name;
-  $('subline').textContent=t?'Token replay · sample visualization':`Live Arc testnet contract · ${C.addr}`;
+  $('tokname').textContent=t?'DEMO':C.name;
+  $('subline').textContent=t?'Token demo · synthetic sample data':`Arc Mainnet contract snapshot · ${C.addr}`;
   renderKey();
 }
 
@@ -1001,13 +995,13 @@ function renderKey(){
 <p>${sw('',`solid rgb(${BONE})`)}<span>Wallet groups. Size is share of supply, dots are wallets. Dashed means maybe connected.</span></p>
 <p>${sw(`rgb(${BONE})`)}<span>Pale vessels: transfers between wallets. Thicker means more USDC.</span></p>
 <p>${sw(`rgb(${AMBER})`)}<span>Amber: a risk signal, with the evidence behind it.</span></p>`:`
-<p>${sw('#a3203a')}<span>Heart: the contract. It beats with each batch of calls.</span></p>
-<p>${sw('#3d5f9e')}<span>Blue: users putting funds in. Red: users taking funds out.</span></p>
-<p>${sw('#ff5a45')}<span>Red or amber vessels to the admin wallet: powers it can use right away.</span></p>
-<p>${sw('',`dashed rgb(${BONE})`)}<span>Dashed vessel with a valve: a power held back by a timelock or cap.</span></p>
-<p>${sw('#8a3a34')}<span>A cross on the red vessel: a sell that reverted.</span></p>`;
+<p>${sw('#a3203a')}<span>Heart: the scanned contract. This scan does not visualize transaction activity.</span></p>
+<p>${sw('#3d5f9e')}<span>Transaction activity is not included in this contract scan.</span></p>
+<p>${sw('#ff5a45')}<span>Admin powers appear only when a scan has evidence for them.</span></p>
+<p>${sw('',`dashed rgb(${BONE})`)}<span>Dashed paths indicate a permission guard when one is detected.</span></p>
+<p>${sw('#8a3a34')}<span>Sellability and withdrawal behavior are not tested yet.</span></p>`;
 }
-renderSamples();renderKey();
+renderKey();
 $('key').hidden=true;
 
 /* ---------- loop ---------- */
@@ -1039,6 +1033,4 @@ function frame(now){
 addEventListener('resize',resize);
 resize();updateAll();
 requestAnimationFrame(frame);
-// test hook
-window.__arc={acct:()=>acct,start:(m,id)=>{if(m==='token')$('scan').click();else{sampleId=id||sampleId;$('scanC').click();}},seek:b=>{pause();seek(b);},select:id=>{select(id);},state:()=>({mode,curB,playing})};
 })();

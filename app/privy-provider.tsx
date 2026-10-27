@@ -2,8 +2,7 @@
 
 import { PrivyProvider, usePrivy, useWallets } from '@privy-io/react-auth'
 import { useEffect } from 'react'
-
-const ARC_TESTNET_CHAIN_ID = 5042002
+import { ARC_CHAIN_ID } from '@/lib/arc-network'
 
 function PulseWalletBridge() {
   const { login, logout, getAccessToken, authenticated, user, ready } = usePrivy()
@@ -17,7 +16,7 @@ function PulseWalletBridge() {
     }
     window.__pulsePrivySwitchToArc = async () => {
       if (!wallet) throw new Error('Connect a wallet first')
-      await wallet.switchChain(ARC_TESTNET_CHAIN_ID)
+      await wallet.switchChain(ARC_CHAIN_ID)
     }
     return () => { delete window.__pulsePrivyConnect; delete window.__pulsePrivySendUsdc; delete window.__pulsePrivySwitchToArc }
   }, [login, wallets])

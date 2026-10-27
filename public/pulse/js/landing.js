@@ -185,8 +185,8 @@ let cur=1;
 function renderV(){
   const s=SAMPLES[cur];
   [...$('L-tabs').children].forEach((b,i)=>b.setAttribute('aria-selected',String(i===cur)));
-  $('L-verdict').innerHTML=`<div class="L-score" style="color:${s.col}">${s.score}<small>Risk score,<br>0 to 100</small></div><div><div class="L-vh">${s.head}</div><div class="L-vact" style="color:${s.col}">${s.act}</div><ul class="L-vl">${s.rs.map(r=>`<li><span class="sv ${r[0]}">${SV[r[0]]}</span><span>${r[1]}</span></li>`).join('')}</ul><button class="L-btn" id="L-open">Open ${s.name} in the scanner</button></div>`;
-  $('L-open').onclick=()=>{closeL();window.__arc.start('contract',s.id);};
+  $('L-verdict').innerHTML=`<div class="L-score" style="color:${s.col}">${s.score}<small>Risk score,<br>0 to 100</small></div><div><div class="L-vh">${s.head}</div><div class="L-vact" style="color:${s.col}">${s.act}</div><ul class="L-vl">${s.rs.map(r=>`<li><span class="sv ${r[0]}">${SV[r[0]]}</span><span>${r[1]}</span></li>`).join('')}</ul><button class="L-btn" id="L-open">Open live scanner</button></div>`;
+  $('L-open').onclick=closeL;
 }
 $('L-tabs').innerHTML=SAMPLES.map((s,i)=>`<button class="L-tab" role="tab" data-i="${i}" aria-selected="false">${s.name}</button>`).join('');
 $('L-tabs').addEventListener('click',e=>{const b=e.target.closest('.L-tab');if(b){cur=+b.dataset.i;renderV();}});

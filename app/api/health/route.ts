@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
+import { ARC_CHAIN_ID } from '@/lib/arc-network'
+import { ARC_RPC_URL } from '@/lib/arc-rpc'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-const ARC_RPC_URL = process.env.ARC_RPC_URL ?? 'https://rpc.testnet.arc.network'
-const ARC_CHAIN_ID = 5042002
 
 async function checkArcRpc() {
   const response = await fetch(ARC_RPC_URL, {

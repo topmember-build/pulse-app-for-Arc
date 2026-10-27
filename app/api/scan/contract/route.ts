@@ -4,11 +4,11 @@ import { db } from '@/lib/db'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { getVerifiedPrivyWallet, WalletAuthError } from '@/lib/privy-auth'
 import { contractScanRequestSchema, contractScanSchema } from '@/lib/schemas'
+import { formatTokenAmount } from '@/lib/token-analysis'
+import { ARC_CHAIN_ID, ARC_NETWORK_NAME, ARC_NATIVE_CURRENCY } from '@/lib/arc-network'
+import { ARC_RPC_URL } from '@/lib/arc-rpc'
 
 export const runtime = 'nodejs'
-
-const ARC_RPC_URL = process.env.ARC_RPC_URL ?? 'https://rpc.testnet.arc.network'
-const ARC_CHAIN_ID = 5042002
 
 type RpcResponse = { result?: unknown; error?: { message?: string } }
 
@@ -80,33 +80,39 @@ export async function POST(request: Request) {
     }
 
     const isContract = code !== '0x'
+    if (!isContract) {
+      await saveHistory(verifiedWallet.userId, verifiedWallet.walletAddress, address, 'failed', { error: 'not_a_contract' }).catch(() => undefined)
+      return response(requestId, { error: 'not_a_contract' }, 422)
+    }
+
     const bytecodeBytes = Math.max(0, (code.length - 2) / 2)
-    const nativeBalance = Number.parseInt(balance, 16) / 1e18
+    const nativeBalance = formatTokenAmount(BigInt(balance), ARC_NATIVE_CURRENCY.decimals)
     const findings = [
       {
-        sev: isContract ? 'ok' : 'high', short: isContract ? 'Contract bytecode found' : 'No contract at address',
-        plain: isContract ? 'This address has executable code on Arc testnet.' : 'This address is not a deployed contract on Arc testnet.',
-        title: isContract ? 'Runtime bytecode exists' : 'Externally owned account or missing deployment',
-        detail: isContract ? `The live runtime bytecode is ${bytecodeBytes.toLocaleString()} bytes.` : 'The RPC returned empty runtime bytecode.',
-        where: 'Arc testnet · latest block',
+        sev: 'ok', short: 'Contract bytecode found',
+        plain: `This address has executable code on ${ARC_NETWORK_NAME}.`,
+        title: 'Runtime bytecode exists',
+        detail: `The live runtime bytecode is ${bytecodeBytes.toLocaleString()} bytes.`,
+        where: `${ARC_NETWORK_NAME} · latest block`,
       },
     ] as const
     const result = contractScanSchema.parse({
       id: address,
       name: `${address.slice(0, 6)}…${address.slice(-4)}`,
-      kind: isContract ? 'Live Arc contract' : 'Address without bytecode',
+      kind: `Live ${ARC_NETWORK_NAME} contract`,
       addr: address,
-      headline: isContract ? 'Live bytecode was found on Arc testnet.' : 'No deployed contract was found at this address.',
-      beat: { every: 2, jitter: 0.2 }, flow: { dep: 0, wd: 0, fail: 0 },
+      headline: `Live bytecode was found on ${ARC_NETWORK_NAME}.`,
+      beat: { every: 0, jitter: 0 },
+      flow: { dep: 0, wd: 0, fail: 0 },
       owner: { type: 'unknown', label: 'Not inferred from RPC-only scan', dots: 0, lit: 0, last: 'No owner analysis yet' },
-      facts: [['Network', 'Arc testnet'], ['Runtime bytecode', `${bytecodeBytes.toLocaleString()} bytes`], ['Native balance', `${nativeBalance.toFixed(6)} ETH equivalent`]],
+      facts: [['Network', ARC_NETWORK_NAME], ['Runtime bytecode', `${bytecodeBytes.toLocaleString()} bytes`], [`Native ${ARC_NATIVE_CURRENCY.symbol} balance`, `${nativeBalance} ${ARC_NATIVE_CURRENCY.symbol}`]],
       powers: [], findings,
     })
 
     await saveHistory(verifiedWallet.userId, verifiedWallet.walletAddress, address, 'complete', { headline: result.headline, findings: result.findings.length }).catch((error) => {
       console.warn(JSON.stringify({ event: 'pulse.scan_history.write_failed', route: 'contract-scan', requestId, errorName: error instanceof Error ? error.name : 'unknown' }))
     })
-    console.info(JSON.stringify({ event: 'pulse.contract_scan.completed', requestId, durationMs: Date.now() - startedAt, isContract, bytecodeBytes }))
+    console.info(JSON.stringify({ event: 'pulse.contract_scan.completed', requestId, durationMs: Date.now() - startedAt, isContract: true, bytecodeBytes }))
     return response(requestId, result)
   } catch (error) {
     await saveHistory(verifiedWallet.userId, verifiedWallet.walletAddress, address, 'failed', { error: 'arc_rpc_unavailable' }).catch(() => undefined)
