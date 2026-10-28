@@ -15,7 +15,7 @@ export function PrivyAppProvider({ children }: { children: React.ReactNode }) {
         embeddedWallets: { ethereum: { createOnLogin: 'all-users' } },
         appearance: {
           theme: 'dark',
-          accentColor: '#ff735d',
+          accentColor: '#ff5a45',
           landingHeader: 'Connect to Pulse',
           walletList: ['detected_ethereum_wallets', 'coinbase_wallet', 'metamask'],
         },

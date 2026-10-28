@@ -10,7 +10,28 @@ import { callArcRpc, decodeAbiString, optionalEthCall, parseRpcBigInt, parseRpcQ
 export const runtime = 'nodejs'
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+const SCAN_WINDOW_BLOCKS = 2_500
+const LOG_CHUNK_BLOCKS = 500
 const MAX_ANALYZED_EVENTS = 10_000
+
+async function getTransferLogs(address: string, fromBlock: number, toBlock: number) {
+  const ranges: Array<{ fromBlock: number; toBlock: number }> = []
+  for (let start = fromBlock; start <= toBlock; start += LOG_CHUNK_BLOCKS) {
+    ranges.push({ fromBlock: start, toBlock: Math.min(toBlock, start + LOG_CHUNK_BLOCKS - 1) })
+  }
+
+  const responses = await Promise.all(ranges.map(({ fromBlock: start, toBlock: end }) =>
+    callArcRpc<unknown>('eth_getLogs', [{
+      address,
+      fromBlock: `0x${start.toString(16)}`,
+      toBlock: `0x${end.toString(16)}`,
+      topics: [TRANSFER_TOPIC],
+    }]),
+  ))
+
+  if (responses.some((response) => !Array.isArray(response))) throw new Error('arc_rpc_invalid_logs')
+  return (responses as unknown[][]).flat()
+}
 
 function response(requestId: string, body: unknown, status = 200, additionalHeaders: Record<string, string> = {}) {
   return Response.json(body, {
@@ -125,14 +146,8 @@ export async function POST(request: Request) {
       return response(requestId, { error: 'not_a_contract' }, 422)
     }
 
-    const fromBlock = Math.max(0, latestBlock - 499)
-    const rawLogs = await callArcRpc<unknown>('eth_getLogs', [{
-      address,
-      fromBlock: `0x${fromBlock.toString(16)}`,
-      toBlock: `0x${latestBlock.toString(16)}`,
-      topics: [TRANSFER_TOPIC],
-    }])
-    if (!Array.isArray(rawLogs)) throw new Error('arc_rpc_invalid_logs')
+    const fromBlock = Math.max(0, latestBlock - (SCAN_WINDOW_BLOCKS - 1))
+    const rawLogs = await getTransferLogs(address, fromBlock, latestBlock)
 
     const parsedEvents = rawLogs.map(parseTransferLog)
     const invalidEvents = parsedEvents.filter((event) => event === null).length
