@@ -13,6 +13,12 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
+  --color-pulse-bg: var(--pulse-bg);
+  --color-pulse-panel: var(--pulse-panel);
+  --color-pulse-line: var(--pulse-line);
+  --color-pulse-bone: var(--pulse-bone);
+  --color-pulse-muted: var(--pulse-muted);
+  --color-pulse-accent: var(--pulse-accent);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -46,6 +52,12 @@
 }
 
 :root {
+  --pulse-bg: #0b0d0e;
+  --pulse-panel: #131618;
+  --pulse-line: #2a3032;
+  --pulse-bone: #f1eee7;
+  --pulse-muted: #a2a9aa;
+  --pulse-accent: #ff735d;
   color-scheme: light;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -89,8 +101,8 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  --primary: var(--pulse-accent);
+  --primary-foreground: var(--pulse-bg);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);

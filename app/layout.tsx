@@ -3,17 +3,19 @@ import { PrivyAppProvider } from './privy-provider'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Pulse for Arc Mainnet — Token Activity and Contract Checks',
-  description: 'Review recent Arc Mainnet token transfers and basic contract facts, with evidence, coverage, and limitations made clear.',
+  title: 'Pulse for Arc Mainnet — Live Token and Contract Analysis',
+  description: 'Scan live Arc Mainnet transfer events and contract properties with authenticated, database-backed history and transparent evidence coverage.',
+  applicationName: 'Pulse for Arc',
+  robots: { index: true, follow: true },
 }
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   userScalable: true,
-  themeColor: '#09090d',
+  themeColor: '#0b0d0e',
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body><PrivyAppProvider>{children}</PrivyAppProvider></body></html>
+  return <html lang="en" className="dark"><body><PrivyAppProvider>{children}</PrivyAppProvider></body></html>
 }

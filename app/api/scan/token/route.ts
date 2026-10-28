@@ -1,26 +1,16 @@
 import { randomUUID } from 'node:crypto'
-import { sql } from 'drizzle-orm'
-import { db } from '@/lib/db'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { getVerifiedPrivyWallet, WalletAuthError } from '@/lib/privy-auth'
-import { analyzeTokenTransfers, formatTokenAmount, TransferEvidence } from '@/lib/token-analysis'
+import { analyzeTokenTransfers, formatTokenAmount, type TransferEvidence } from '@/lib/token-analysis'
+import { saveScanHistory } from '@/lib/scan-history'
 import { tokenScanRequestSchema, tokenScanSchema } from '@/lib/schemas'
 import { ARC_CHAIN_ID, ARC_NETWORK_NAME } from '@/lib/arc-network'
-import { ARC_RPC_URL } from '@/lib/arc-rpc'
+import { callArcRpc, decodeAbiString, optionalEthCall, parseRpcBigInt, parseRpcQuantity } from '@/lib/arc-rpc'
 
 export const runtime = 'nodejs'
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 const MAX_ANALYZED_EVENTS = 10_000
-
-type RpcResponse = { result?: unknown; error?: { code?: number; message?: string } }
-type RawTransferLog = {
-  topics?: unknown[]
-  data?: unknown
-  blockNumber?: unknown
-  transactionHash?: unknown
-  logIndex?: unknown
-}
 
 function response(requestId: string, body: unknown, status = 200, additionalHeaders: Record<string, string> = {}) {
   return Response.json(body, {
@@ -29,106 +19,15 @@ function response(requestId: string, body: unknown, status = 200, additionalHead
   })
 }
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-async function rpc(method: string, params: unknown[]): Promise<unknown> {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      const result = await fetch(ARC_RPC_URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: randomUUID(), method, params }),
-        cache: 'no-store',
-        signal: AbortSignal.timeout(12_000),
-      })
-      if (!result.ok) {
-        if (attempt < 2 && (result.status === 429 || result.status >= 500)) {
-          await delay(150 * (attempt + 1))
-          continue
-        }
-        throw new Error('arc_rpc_http_error')
-      }
-
-      const payload = await result.json() as RpcResponse
-      if (payload.error) {
-        const retryable = [-32005, -32014, -32016, -32603].includes(payload.error.code ?? 0)
-        if (attempt < 2 && retryable) {
-          await delay(150 * (attempt + 1))
-          continue
-        }
-        throw new Error('arc_rpc_method_error')
-      }
-      if (!('result' in payload)) throw new Error('arc_rpc_invalid_response')
-      return payload.result
-    } catch (error) {
-      const retryable = error instanceof TypeError
-        || (error instanceof Error && ['AbortError', 'TimeoutError'].includes(error.name))
-      if (attempt < 2 && retryable) {
-        await delay(150 * (attempt + 1))
-        continue
-      }
-      throw error
-    }
-  }
-
-  throw new Error('arc_rpc_unavailable')
-}
-
-async function optionalCall(address: string, data: string) {
-  try {
-    const result = await rpc('eth_call', [{ to: address, data }, 'latest'])
-    return typeof result === 'string' ? result : null
-  } catch {
-    return null
-  }
-}
-
-function parseQuantity(value: unknown): number | null {
-  if (typeof value !== 'string' || !/^0x[0-9a-f]+$/i.test(value)) return null
-  const parsed = Number.parseInt(value, 16)
-  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null
-}
-
-function parseUint(value: unknown): bigint | null {
-  if (typeof value !== 'string' || !/^0x[0-9a-f]+$/i.test(value)) return null
-  try {
-    return BigInt(value)
-  } catch {
-    return null
-  }
-}
-
-function decodeAbiString(value: string | null): string | null {
-  if (!value || !/^0x[0-9a-f]*$/i.test(value)) return null
-  const data = value.slice(2)
-  if (data.length < 64) return null
-
-  try {
-    const firstWord = BigInt(`0x${data.slice(0, 64)}`)
-    let start = 0
-    let length = 32
-
-    if (firstWord === BigInt(32) && data.length >= 128) {
-      const dynamicLength = Number(BigInt(`0x${data.slice(64, 128)}`))
-      if (!Number.isSafeInteger(dynamicLength) || dynamicLength < 0 || dynamicLength > 1024) return null
-      start = 128
-      length = dynamicLength
-    }
-
-    const decoded = Buffer.from(data.slice(start, start + length * 2), 'hex')
-      .toString('utf8')
-      .replace(/\0+$/g, '')
-      .replace(/[\u0000-\u001f\u007f]/g, '')
-      .trim()
-    return decoded ? decoded.slice(0, 64) : null
-  } catch {
-    return null
-  }
-}
-
 function parseTransferLog(value: unknown): TransferEvidence | null {
   if (!value || typeof value !== 'object') return null
-  const log = value as RawTransferLog
+  const log = value as {
+    topics?: unknown[]
+    data?: unknown
+    blockNumber?: unknown
+    transactionHash?: unknown
+    logIndex?: unknown
+  }
   const topics = log.topics
   if (!Array.isArray(topics) || topics.length < 3 || typeof topics[0] !== 'string' || topics[0].toLowerCase() !== TRANSFER_TOPIC) return null
   if (typeof topics[1] !== 'string' || typeof topics[2] !== 'string' || typeof log.data !== 'string') return null
@@ -136,9 +35,9 @@ function parseTransferLog(value: unknown): TransferEvidence | null {
   if (!/^0x[0-9a-f]{64}$/i.test(log.data)) return null
   if (typeof log.transactionHash !== 'string' || !/^0x[0-9a-f]{64}$/i.test(log.transactionHash)) return null
 
-  const blockNumber = parseQuantity(log.blockNumber)
-  const logIndex = parseQuantity(log.logIndex)
-  const amount = parseUint(log.data)
+  const blockNumber = parseRpcQuantity(log.blockNumber)
+  const logIndex = parseRpcQuantity(log.logIndex)
+  const amount = parseRpcBigInt(log.data)
   if (blockNumber === null || logIndex === null || amount === null) return null
 
   return {
@@ -151,11 +50,21 @@ function parseTransferLog(value: unknown): TransferEvidence | null {
   }
 }
 
-async function saveHistory(userId: string, walletAddress: string, address: string, status: 'complete' | 'failed', summary: Record<string, unknown>) {
-  await db.execute(sql`
-    INSERT INTO pulse_scan_history (wallet_address, privy_user_id, scan_type, target_address, status, summary)
-    VALUES (${walletAddress.toLowerCase()}, ${userId}, 'token', ${address.toLowerCase()}, ${status}, ${JSON.stringify(summary)}::jsonb)
-  `)
+async function saveHistory(
+  userId: string,
+  walletAddress: string,
+  address: string,
+  status: 'complete' | 'failed',
+  summary: Record<string, unknown>,
+) {
+  await saveScanHistory({
+    walletAddress,
+    privyUserId: userId,
+    scanType: 'token',
+    targetAddress: address,
+    status,
+    summary,
+  })
 }
 
 export async function POST(request: Request) {
@@ -187,21 +96,27 @@ export async function POST(request: Request) {
 
   const address = parsed.data.address.toLowerCase()
   try {
-    const [chainIdHex, code, latestHex, symbolResult, nameResult, decimalsResult, supplyResult] = await Promise.all([
-      rpc('eth_chainId', []),
-      rpc('eth_getCode', [address, 'latest']),
-      rpc('eth_blockNumber', []),
-      optionalCall(address, '0x95d89b41'),
-      optionalCall(address, '0x06fdde03'),
-      optionalCall(address, '0x313ce567'),
-      optionalCall(address, '0x18160ddd'),
+    const [chainIdHex, latestHex] = await Promise.all([
+      callArcRpc<unknown>('eth_chainId', []),
+      callArcRpc<unknown>('eth_blockNumber', []),
     ])
 
-  if (parseQuantity(chainIdHex) !== ARC_CHAIN_ID) {
-    await saveHistory(verifiedWallet.userId, verifiedWallet.walletAddress, address, 'failed', { error: 'wrong_network' }).catch(() => undefined)
-    console.info(JSON.stringify({ event: 'pulse.token_scan.completed', requestId, outcome: 'wrong_network', durationMs: Date.now() - startedAt }))
-    return response(requestId, { error: 'wrong_network' }, 502)
-  }
+    if (parseRpcQuantity(chainIdHex) !== ARC_CHAIN_ID) {
+      await saveHistory(verifiedWallet.userId, verifiedWallet.walletAddress, address, 'failed', { error: 'wrong_network' }).catch(() => undefined)
+      console.info(JSON.stringify({ event: 'pulse.token_scan.completed', requestId, outcome: 'wrong_network', durationMs: Date.now() - startedAt }))
+      return response(requestId, { error: 'wrong_network' }, 502)
+    }
+
+    const latestBlock = parseRpcQuantity(latestHex)
+    if (latestBlock === null) throw new Error('arc_rpc_invalid_block')
+    const blockTag = `0x${latestBlock.toString(16)}`
+    const [code, symbolResult, nameResult, decimalsResult, supplyResult] = await Promise.all([
+      callArcRpc<unknown>('eth_getCode', [address, blockTag]),
+      optionalEthCall(address, '0x95d89b41', blockTag),
+      optionalEthCall(address, '0x06fdde03', blockTag),
+      optionalEthCall(address, '0x313ce567', blockTag),
+      optionalEthCall(address, '0x18160ddd', blockTag),
+    ])
 
     if (typeof code !== 'string') throw new Error('arc_rpc_invalid_code')
     if (code === '0x') {
@@ -210,10 +125,8 @@ export async function POST(request: Request) {
       return response(requestId, { error: 'not_a_contract' }, 422)
     }
 
-    const latestBlock = parseQuantity(latestHex)
-    if (latestBlock === null) throw new Error('arc_rpc_invalid_block')
     const fromBlock = Math.max(0, latestBlock - 499)
-    const rawLogs = await rpc('eth_getLogs', [{
+    const rawLogs = await callArcRpc<unknown>('eth_getLogs', [{
       address,
       fromBlock: `0x${fromBlock.toString(16)}`,
       toBlock: `0x${latestBlock.toString(16)}`,
@@ -227,9 +140,9 @@ export async function POST(request: Request) {
       .filter((event): event is TransferEvidence => event !== null)
       .sort((a, b) => a.blockNumber - b.blockNumber || a.logIndex - b.logIndex)
     const events = validEvents.length > MAX_ANALYZED_EVENTS ? validEvents.slice(-MAX_ANALYZED_EVENTS) : validEvents
-    const decimalsHex = parseQuantity(decimalsResult)
-    const decimals = decimalsHex !== null && decimalsHex <= 36 ? decimalsHex : null
-    const totalSupplyRaw = parseUint(supplyResult)
+    const decimalsValue = parseRpcQuantity(decimalsResult)
+    const decimals = decimalsValue !== null && decimalsValue <= 36 ? decimalsValue : null
+    const totalSupplyRaw = parseRpcBigInt(supplyResult)
     const totalSupply = totalSupplyRaw !== null && decimals !== null
       ? formatTokenAmount(totalSupplyRaw, decimals)
       : null
@@ -243,11 +156,11 @@ export async function POST(request: Request) {
       decimals,
     })
 
-    const result = tokenScanSchema.parse({
+    const resultCore = tokenScanSchema.omit({ historySaved: true }).parse({
       token: {
         address,
-        name: decodeAbiString(typeof nameResult === 'string' ? nameResult : null) ?? 'Unnamed token',
-        symbol: decodeAbiString(typeof symbolResult === 'string' ? symbolResult : null) ?? 'TOKEN',
+        name: decodeAbiString(typeof nameResult === 'string' ? nameResult : null),
+        symbol: decodeAbiString(typeof symbolResult === 'string' ? symbolResult : null),
         decimals,
         totalSupply,
       },
@@ -256,19 +169,19 @@ export async function POST(request: Request) {
       scannedAt: new Date().toISOString(),
     })
 
-    await saveHistory(verifiedWallet.userId, verifiedWallet.walletAddress, address, 'complete', {
-      name: result.token.name,
-      symbol: result.token.symbol,
-      transferCount: result.metrics.transferCount,
-      signalCount: result.assessment.signals.length,
-      signalScore: result.assessment.score,
-      signalLevel: result.assessment.level,
-      fromBlock,
-      toBlock: latestBlock,
-    }).catch((error) => {
+    let historySaved = false
+    try {
+      await saveHistory(verifiedWallet.userId, verifiedWallet.walletAddress, address, 'complete', {
+        title: resultCore.token.name ?? resultCore.token.symbol ?? 'Token activity scan',
+        subtitle: `${resultCore.metrics.transferCount} events · ${resultCore.assessment.label}`,
+        snapshot: { ...resultCore, historySaved: true },
+      })
+      historySaved = true
+    } catch (error) {
       console.warn(JSON.stringify({ event: 'pulse.scan_history.write_failed', route: 'token-scan', requestId, errorName: error instanceof Error ? error.name : 'unknown' }))
-    })
+    }
 
+    const result = tokenScanSchema.parse({ ...resultCore, historySaved })
     console.info(JSON.stringify({
       event: 'pulse.token_scan.completed',
       requestId,
@@ -277,6 +190,7 @@ export async function POST(request: Request) {
       transferEvents: result.metrics.transferCount,
       signalCount: result.assessment.signals.length,
       truncated: result.coverage.truncated,
+      historySaved,
     }))
     return response(requestId, result)
   } catch (error) {

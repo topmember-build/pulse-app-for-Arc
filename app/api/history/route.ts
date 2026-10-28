@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { sql } from 'drizzle-orm'
-import { db } from '@/lib/db'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { getVerifiedPrivyWallet, WalletAuthError } from '@/lib/privy-auth'
+import { listScanHistory } from '@/lib/scan-history'
 
 export const runtime = 'nodejs'
 
@@ -36,22 +35,9 @@ export async function GET(request: Request) {
   }
 
   try {
-    const rows = await db.execute(sql`
-      SELECT id, scan_type, target_address, network,
-        CASE
-          WHEN status = 'pending' AND created_at < now() - interval '10 minutes' THEN 'failed'
-          ELSE status
-        END AS status,
-        summary, created_at
-      FROM pulse_scan_history
-      WHERE lower(wallet_address) = lower(${verifiedWallet.walletAddress})
-        AND (privy_user_id = ${verifiedWallet.userId} OR privy_user_id IS NULL)
-      ORDER BY created_at DESC
-      LIMIT 25
-    `)
-
-    console.info(JSON.stringify({ event: 'pulse.scan_history.read', requestId, durationMs: Date.now() - startedAt, resultCount: rows.rows.length }))
-    return Response.json({ scans: rows.rows }, { headers: responseHeaders })
+    const scans = await listScanHistory(verifiedWallet.walletAddress, verifiedWallet.userId)
+    console.info(JSON.stringify({ event: 'pulse.scan_history.read', requestId, durationMs: Date.now() - startedAt, resultCount: scans.length }))
+    return Response.json({ scans }, { headers: responseHeaders })
   } catch (error) {
     console.error(JSON.stringify({ event: 'pulse.scan_history.failed', requestId, durationMs: Date.now() - startedAt, errorName: error instanceof Error ? error.name : 'unknown' }))
     return Response.json({ error: 'history_unavailable' }, { status: 503, headers: responseHeaders })

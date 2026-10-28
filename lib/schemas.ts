@@ -5,31 +5,17 @@ const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/, 'Invalid EVM address')
 export const contractScanRequestSchema = z.object({ address })
 export const tokenScanRequestSchema = z.object({ address })
 
-const findingSchema = z.object({
-  sev: z.enum(['high', 'med', 'low', 'ok', 'info']),
-  short: z.string(), plain: z.string(), title: z.string(), detail: z.string(), where: z.string(), power: z.string().optional(),
-})
-
-export const contractScanSchema = z.object({
-  id: z.string(), name: z.string(), kind: z.string(), addr: z.string(), headline: z.string(),
-  beat: z.object({ every: z.number(), jitter: z.number() }),
-  flow: z.object({ dep: z.number(), wd: z.number(), fail: z.number() }),
-  owner: z.object({ type: z.string(), label: z.string(), dots: z.number(), lit: z.number(), last: z.string() }),
-  top: z.object({ label: z.string(), share: z.number(), dots: z.number() }).optional(),
-  facts: z.array(z.tuple([z.string(), z.string()])),
-  powers: z.array(z.object({ id: z.string(), label: z.string(), guard: z.string(), guardLabel: z.string(), sev: z.enum(['high', 'med', 'low', 'ok', 'info']), siphon: z.boolean() })),
-  findings: z.array(findingSchema),
-})
+const networkSchema = z.object({ name: z.string(), chainId: z.number().int() })
 
 export const tokenScanSchema = z.object({
   token: z.object({
     address,
-    name: z.string(),
-    symbol: z.string(),
+    name: z.string().nullable(),
+    symbol: z.string().nullable(),
     decimals: z.number().int().min(0).max(36).nullable(),
     totalSupply: z.string().nullable(),
   }),
-  network: z.object({ name: z.string(), chainId: z.number().int() }),
+  network: networkSchema,
   coverage: z.object({
     fromBlock: z.number().int().nonnegative(),
     toBlock: z.number().int().nonnegative(),
@@ -65,7 +51,7 @@ export const tokenScanSchema = z.object({
   }),
   transfers: z.array(z.object({
     blockNumber: z.number().int().nonnegative(),
-    transactionHash: z.string(),
+    transactionHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
     logIndex: z.number().int().nonnegative(),
     from: address,
     to: address,
@@ -74,7 +60,59 @@ export const tokenScanSchema = z.object({
     amountRaw: z.string(),
   })),
   scannedAt: z.string().datetime(),
+  historySaved: z.boolean(),
 })
+
+export const contractScanSchema = z.object({
+  contract: z.object({
+    address,
+    bytecodeBytes: z.number().int().positive(),
+    nativeBalance: z.string(),
+    token: z.object({
+      isTokenLike: z.boolean(),
+      name: z.string().nullable(),
+      symbol: z.string().nullable(),
+      decimals: z.number().int().min(0).max(36).nullable(),
+      totalSupply: z.string().nullable(),
+    }),
+    ownerStatus: z.enum(['active', 'renounced', 'not_exposed']),
+    ownerAddress: address.nullable(),
+    pauseStatus: z.enum(['paused', 'not_paused', 'not_exposed']),
+    proxy: z.object({
+      kind: z.enum(['eip1967', 'eip1167', 'none_detected', 'unknown']),
+      implementation: address.nullable(),
+      implementationBytecodeBytes: z.number().int().nonnegative().nullable(),
+      admin: address.nullable(),
+      beacon: address.nullable(),
+    }),
+  }),
+  network: networkSchema,
+  coverage: z.object({
+    blockNumber: z.number().int().nonnegative(),
+    scannedAt: z.string().datetime(),
+  }),
+  observations: z.array(z.object({
+    id: z.string(),
+    severity: z.enum(['info', 'review']),
+    title: z.string(),
+    detail: z.string(),
+  })),
+  limitations: z.array(z.string()),
+  historySaved: z.boolean(),
+})
+
+export const scanHistoryEntrySchema = z.object({
+  id: z.string().uuid(),
+  scanType: z.enum(['token', 'contract']),
+  targetAddress: address,
+  network: z.string(),
+  status: z.enum(['complete', 'failed', 'pending']),
+  summary: z.record(z.string(), z.unknown()),
+  createdAt: z.string().datetime(),
+})
+
+export const scanHistoryResponseSchema = z.object({ scans: z.array(scanHistoryEntrySchema) })
 
 export type ContractScan = z.infer<typeof contractScanSchema>
 export type TokenScan = z.infer<typeof tokenScanSchema>
+export type ScanHistoryEntry = z.infer<typeof scanHistoryEntrySchema>
