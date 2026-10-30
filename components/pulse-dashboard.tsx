@@ -4,7 +4,6 @@ import { useState, type FormEvent, type KeyboardEvent } from 'react'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import useSWR from 'swr'
 import {
-  Activity,
   ArrowDownRight,
   ArrowUpRight,
   Check,
@@ -34,6 +33,7 @@ import {
 } from '@/lib/schemas'
 import { ContractScanResults, TokenScanResults } from '@/components/scan-results'
 import { ScanHistory } from '@/components/scan-history'
+import { PulseHeart } from '@/components/pulse-heart'
 
 type ScanType = 'token' | 'contract'
 type HealthResponse = {
@@ -63,6 +63,14 @@ class PulseApiError extends Error {
 }
 
 const ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/
+
+function PulseMark({ className = '' }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 30 16" className={className} fill="none">
+      <polyline points="0,9 8,9 10,6 13,14 16,1 19,11 21,9 30,9" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  )
+}
 
 async function fetchHealth(url: string): Promise<HealthResponse> {
   const response = await fetch(url, { cache: 'no-store' })
@@ -104,9 +112,9 @@ function shortAddress(value: string) {
 
 function StatusDot({ state }: { state: 'ok' | 'down' | 'checking' }) {
   const colors = {
-    ok: 'bg-emerald-400',
-    down: 'bg-rose-400',
-    checking: 'bg-amber-300',
+    ok: 'bg-pulse-venous',
+    down: 'bg-pulse-accent',
+    checking: 'bg-pulse-amber',
   }
   return <span aria-hidden="true" className={`inline-block size-2 rounded-full ${colors[state]}`} />
 }
@@ -143,7 +151,7 @@ function PrivySetupNotice() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-pulse-bg px-5 py-10 text-pulse-bone">
       <section className="w-full max-w-lg rounded-2xl border border-pulse-line bg-pulse-panel p-7 sm:p-9">
-        <Activity aria-hidden="true" className="size-7 text-pulse-accent" />
+        <PulseMark className="h-4 w-[30px] text-pulse-accent" />
         <p className="mt-6 text-xs font-semibold uppercase tracking-[0.22em] text-pulse-muted">Pulse · Arc Mainnet</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight">Wallet sign-in is not configured</h1>
         <p className="mt-3 text-sm leading-6 text-pulse-muted">Pulse requires a Privy app to verify wallet ownership before saving private scan history. Live scanning is disabled until the app authentication configuration is available.</p>
@@ -313,8 +321,8 @@ function PulseDashboardContent({ health, healthLoading, healthError }: { health?
       <header className="sticky top-0 z-20 border-b border-pulse-line/80 bg-pulse-bg/90 backdrop-blur-xl">
         <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <a href="#top" className="inline-flex items-center gap-2.5" aria-label="Pulse home">
-            <span className="grid size-9 place-items-center rounded-xl border border-pulse-line bg-pulse-panel text-pulse-accent"><Activity aria-hidden="true" className="size-5" /></span>
-            <span className="text-base font-semibold tracking-tight">pulse<span className="ml-1.5 text-xs font-medium uppercase tracking-[0.16em] text-pulse-muted">for Arc</span></span>
+            <PulseMark className="h-4 w-[30px] text-pulse-accent" />
+            <span className="font-serif text-xl font-semibold tracking-tight">Pulse<span className="ml-2 font-sans text-xs font-medium text-pulse-muted">for Arc</span></span>
           </a>
           <div className="hidden items-center gap-5 md:flex"><HealthSummary health={health} loading={healthLoading} /></div>
           <div className="flex items-center gap-2">
@@ -339,22 +347,32 @@ function PulseDashboardContent({ health, healthLoading, healthError }: { health?
       </header>
 
       <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-14">
-        <section id="top" className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(240px,0.42fr)] lg:items-end">
-          <div className="max-w-3xl">
-            <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-pulse-accent"><span className="size-1.5 rounded-full bg-pulse-accent" />Live Arc Mainnet evidence</p>
-            <h1 className="mt-4 max-w-3xl text-4xl font-semibold leading-[1.05] tracking-[-0.045em] sm:text-5xl lg:text-6xl">Analyze the evidence.<br className="hidden sm:block" /> Not the hype.</h1>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-pulse-muted sm:text-base">Read recent ERC-20 transfer activity and observable contract properties directly from Arc Mainnet. Every result carries its scan window, source, and limitations.</p>
+        <section id="top" className="grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(300px,0.95fr)] lg:items-center">
+          <div className="max-w-2xl">
+            <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-pulse-accent"><span className="size-1.5 rounded-full bg-pulse-accent" />Pulse · Arc Mainnet</p>
+            <h1 className="mt-4 max-w-3xl text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">Check a token or contract on Arc before you trust it.</h1>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-pulse-muted sm:text-base">Pulse draws token movement as a living heart. Blue veins bring transfers in, coral arteries carry them out, and amber means look twice. Read the plain-language signal first, then open the evidence.</p>
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <a href="#scanner" className="inline-flex min-h-12 items-center justify-center rounded-lg border border-pulse-accent bg-pulse-accent px-5 text-sm font-semibold text-pulse-bg transition hover:brightness-110">Start a live scan</a>
+              <span className="text-xs text-pulse-muted">Read-only Arc RPC · no transaction signing</span>
+            </div>
           </div>
-          <div className="rounded-2xl border border-pulse-line bg-pulse-panel/70 p-4 sm:p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-2 text-sm font-medium"><Network aria-hidden="true" className="size-4 text-pulse-accent" />Arc Mainnet</div>
-              <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${rpcOnline ? 'bg-emerald-300/10 text-emerald-200' : 'bg-amber-300/10 text-amber-100'}`}>{rpcOnline ? 'Connected' : 'Checking'}</span>
+          <div className="pulse-heart-stage overflow-hidden rounded-xl border border-pulse-line px-4 pt-4 sm:px-6">
+            <div className="flex items-center justify-between gap-4">
+              <div><p className="font-serif text-lg font-semibold">Arc is alive</p><p className="mt-1 text-xs text-pulse-muted">Chain ID 5042 · read-only evidence</p></div>
+              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${rpcOnline ? 'border-pulse-venous/35 bg-pulse-venous/10 text-pulse-venous' : 'border-pulse-amber/35 bg-pulse-amber/10 text-pulse-amber'}`}>{rpcOnline ? 'RPC connected' : 'Checking'}</span>
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-pulse-line pt-4 text-xs">
-              <div><p className="text-pulse-muted">Chain ID</p><p className="mt-1 font-mono text-pulse-bone">5042</p></div>
-              <div><p className="text-pulse-muted">Access mode</p><p className="mt-1 text-pulse-bone">Read-only RPC</p></div>
+            <PulseHeart
+              activityLevel={tokenResult ? Math.min(1, tokenResult.metrics.transferCount / 80) : 0.22}
+              attentionLevel={tokenResult ? Math.min(1, tokenResult.assessment.signals.length / 4) : contractResult ? Math.min(1, contractResult.observations.filter((item) => item.severity === 'review').length / 3) : 0}
+              label="Pulse’s anatomical heart illustration, with blue veins and coral arteries"
+              className="mx-auto block aspect-square w-full max-w-[350px]"
+            />
+            <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-pulse-line/70 py-3 text-xs text-pulse-muted">
+              <span className="inline-flex items-center gap-2"><span className="size-2 rounded-full bg-pulse-venous" />Transfers in</span>
+              <span className="inline-flex items-center gap-2"><span className="size-2 rounded-full bg-pulse-accent" />Transfers out</span>
+              <span className="inline-flex items-center gap-2"><span className="size-2 rounded-full bg-pulse-amber" />Review signal</span>
             </div>
-            <div className="mt-3 md:hidden"><HealthSummary health={health} loading={healthLoading} /></div>
           </div>
         </section>
 
@@ -382,7 +400,7 @@ function PulseDashboardContent({ health, healthLoading, healthError }: { health?
                     {scanning ? <><LoaderCircle className="animate-spin" data-icon="inline-start" />Scanning Arc</> : <><Search data-icon="inline-start" />{authenticated ? 'Run live scan' : 'Connect wallet'}</>}
                   </Button>
                 </div>
-                <p id="scan-guidance" className="text-xs leading-5 text-pulse-muted">{scanType === 'token' ? 'Reads ERC-20 Transfer logs across the latest 500 blocks and returns up to 20 recent events.' : 'Reads bytecode, token metadata, ownership/pause getters, proxy storage slots, and native balance when exposed.'} A connected Privy wallet is required to run scans and save private history.</p>
+                <p id="scan-guidance" className="text-xs leading-5 text-pulse-muted">{scanType === 'token' ? 'Reads recent ERC-20 transfers, then checks for shared-source fan-out, matching amounts, same-block bursts, and circular movement.' : 'Reads bytecode, token metadata, ownership/pause getters, proxy storage slots, and native balance when exposed.'} A connected Privy wallet is required to run scans and save private history.</p>
                 <div id="scan-feedback" role="status" aria-live="polite" className="min-h-5 text-sm text-rose-200">{scanError}</div>
               </div>
             </form>

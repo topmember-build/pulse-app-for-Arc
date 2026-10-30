@@ -2,6 +2,7 @@
 
 import { ArrowUpRight, CheckCircle2, CircleAlert, ExternalLink, FileCode2, Info, ShieldAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { PulseHeart } from '@/components/pulse-heart'
 import type { ContractScan, TokenScan } from '@/lib/schemas'
 
 function shortAddress(value: string) {
@@ -44,7 +45,7 @@ const severityClass = {
 }
 
 export function TokenScanResults({ result, historical, onScanContract }: { result: TokenScan; historical: boolean; onScanContract: () => void }) {
-  const { token, network, coverage, metrics, assessment, transfers, scannedAt, historySaved } = result
+  const { token, network, coverage, metrics, assessment, transfers, clusters, bundleSignals, circularFlows, scannedAt, historySaved } = result
   const symbolLabel = token.symbol ?? 'Symbol not returned'
 
   return (

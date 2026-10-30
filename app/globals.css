@@ -19,6 +19,8 @@
   --color-pulse-bone: var(--pulse-bone);
   --color-pulse-muted: var(--pulse-muted);
   --color-pulse-accent: var(--pulse-accent);
+  --color-pulse-venous: var(--pulse-venous);
+  --color-pulse-amber: var(--pulse-amber);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -52,12 +54,16 @@
 }
 
 :root {
-  --pulse-bg: #0b0d0e;
-  --pulse-panel: #131618;
-  --pulse-line: #2a3032;
-  --pulse-bone: #f1eee7;
-  --pulse-muted: #a2a9aa;
-  --pulse-accent: #ff735d;
+  --pulse-bg: #140a13;
+  --pulse-panel: #180c16;
+  --pulse-line: rgb(234 223 206 / 16%);
+  --pulse-bone: #eadfce;
+  --pulse-muted: rgb(234 223 206 / 62%);
+  --pulse-accent: #ff5a45;
+  --pulse-venous: #4fb5e6;
+  --pulse-amber: #f5b83d;
+  --pulse-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  --pulse-sans: 'Avenir Next', 'Segoe UI', system-ui, -apple-system, sans-serif;
   color-scheme: light;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -170,6 +176,15 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    background: var(--pulse-bg);
+    color: var(--pulse-bone);
+    font-family: var(--pulse-sans);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--pulse-serif);
   }
 }

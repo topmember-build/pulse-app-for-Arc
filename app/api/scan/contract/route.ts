@@ -22,6 +22,22 @@ const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 const IMPLEMENTATION_SLOT = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc'
 const ADMIN_SLOT = '0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103'
 const BEACON_SLOT = '0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50'
+const SAFE_THRESHOLD_SELECTOR = '0xe75235b8'
+const SAFE_OWNERS_SELECTOR = '0xa0e67e2b'
+const TIMELOCK_DELAY_SELECTOR = '0xf27a0c92'
+
+const FUNCTION_CANDIDATES = [
+  { selector: '0x40c10f19', signature: 'mint(address,uint256)', title: 'May expose token minting', category: 'issuance', severity: 'review' },
+  { selector: '0x8456cb59', signature: 'pause()', title: 'May expose a pause control', category: 'availability', severity: 'review' },
+  { selector: '0x3f4ba83a', signature: 'unpause()', title: 'May expose an unpause control', category: 'availability', severity: 'info' },
+  { selector: '0x2f2ff15d', signature: 'grantRole(bytes32,address)', title: 'May expose role administration', category: 'access control', severity: 'review' },
+  { selector: '0xd547741f', signature: 'revokeRole(bytes32,address)', title: 'May expose role administration', category: 'access control', severity: 'review' },
+  { selector: '0x3659cfe6', signature: 'upgradeTo(address)', title: 'May expose a code upgrade control', category: 'upgrade', severity: 'review' },
+  { selector: '0x4f1ef286', signature: 'upgradeToAndCall(address,bytes)', title: 'May expose a code upgrade control', category: 'upgrade', severity: 'review' },
+  { selector: '0x8f283970', signature: 'changeAdmin(address)', title: 'May expose an admin-change control', category: 'upgrade', severity: 'review' },
+  { selector: '0xf2fde38b', signature: 'transferOwnership(address)', title: 'May expose ownership transfer', category: 'ownership', severity: 'info' },
+  { selector: '0x715018a6', signature: 'renounceOwnership()', title: 'May expose ownership renunciation', category: 'ownership', severity: 'info' },
+] as const
 
 function response(requestId: string, body: unknown, status = 200, headers: Record<string, string> = {}) {
   return Response.json(body, { status, headers: { 'cache-control': 'no-store', 'x-request-id': requestId, ...headers } })
@@ -38,6 +54,63 @@ async function readStorage(address: string, slot: string, blockTag: string) {
   } catch {
     return null
   }
+}
+
+function decodeAbiUint(value: string | null) {
+  if (!value || !/^0x[0-9a-f]{64}$/i.test(value)) return null
+  try {
+    const parsed = BigInt(value)
+    return parsed <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(parsed) : null
+  } catch {
+    return null
+  }
+}
+
+function decodeAbiAddressArray(value: string | null) {
+  if (!value || !/^0x[0-9a-f]*$/i.test(value)) return null
+  const data = value.slice(2)
+  if (data.length < 128) return null
+
+  try {
+    const offsetBytes = Number(BigInt(`0x${data.slice(0, 64)}`))
+    if (!Number.isSafeInteger(offsetBytes) || offsetBytes < 0 || offsetBytes > 4096) return null
+    const lengthStart = offsetBytes * 2
+    const lengthWord = data.slice(lengthStart, lengthStart + 64)
+    if (lengthWord.length !== 64) return null
+    const length = Number(BigInt(`0x${lengthWord}`))
+    if (!Number.isSafeInteger(length) || length < 0 || length > 50) return null
+
+    const addresses: string[] = []
+    for (let index = 0; index < length; index += 1) {
+      const start = lengthStart + 64 + index * 64
+      const word = data.slice(start, start + 64)
+      if (word.length !== 64 || !/^0{24}$/i.test(word.slice(0, 24))) return null
+      addresses.push(`0x${word.slice(-40).toLowerCase()}`)
+    }
+    return addresses
+  } catch {
+    return null
+  }
+}
+
+function readFunctionSelectors(bytecode: string) {
+  const data = bytecode.slice(2).toLowerCase()
+  const selectors = new Set<string>()
+
+  for (let index = 0; index + 2 <= data.length;) {
+    const opcode = Number.parseInt(data.slice(index, index + 2), 16)
+    if (!Number.isFinite(opcode)) break
+    if (opcode === 0x63 && index + 10 <= data.length) {
+      selectors.add(`0x${data.slice(index + 2, index + 10)}`)
+      index += 10
+    } else if (opcode >= 0x60 && opcode <= 0x7f) {
+      index += 2 + (opcode - 0x5f) * 2
+    } else {
+      index += 2
+    }
+  }
+
+  return selectors
 }
 
 async function saveHistory(
@@ -115,7 +188,7 @@ export async function POST(request: Request) {
     const balanceRaw = parseRpcBigInt(balanceValue)
     if (balanceRaw === null) throw new Error('arc_rpc_invalid_response')
 
-    const [nameResult, symbolResult, decimalsResult, supplyResult, ownerResult, pausedResult, implementationSlotValue, adminSlotValue, beaconSlotValue] = await Promise.all([
+    const [nameResult, symbolResult, decimalsResult, supplyResult, ownerResult, pausedResult, implementationSlotValue, adminSlotValue, beaconSlotValue, safeThresholdResult, safeOwnersResult, timelockDelayResult] = await Promise.all([
       optionalEthCall(address, '0x06fdde03', blockTag),
       optionalEthCall(address, '0x95d89b41', blockTag),
       optionalEthCall(address, '0x313ce567', blockTag),
@@ -125,6 +198,9 @@ export async function POST(request: Request) {
       readStorage(address, IMPLEMENTATION_SLOT, blockTag),
       readStorage(address, ADMIN_SLOT, blockTag),
       readStorage(address, BEACON_SLOT, blockTag),
+      optionalEthCall(address, SAFE_THRESHOLD_SELECTOR, blockTag),
+      optionalEthCall(address, SAFE_OWNERS_SELECTOR, blockTag),
+      optionalEthCall(address, TIMELOCK_DELAY_SELECTOR, blockTag),
     ])
 
     const decimalsValue = parseRpcQuantity(decimalsResult)
@@ -152,6 +228,14 @@ export async function POST(request: Request) {
     const implementationBytecodeBytes = typeof implementationCode === 'string' && /^0x[0-9a-f]*$/i.test(implementationCode)
       ? Math.max(0, (implementationCode.length - 2) / 2)
       : null
+    const safeOwners = decodeAbiAddressArray(typeof safeOwnersResult === 'string' ? safeOwnersResult : null) ?? []
+    const reportedSafeThreshold = decodeAbiUint(typeof safeThresholdResult === 'string' ? safeThresholdResult : null)
+    const safeThreshold = reportedSafeThreshold !== null && reportedSafeThreshold > 0 && reportedSafeThreshold <= safeOwners.length
+      ? reportedSafeThreshold
+      : null
+    const timelockMinDelaySeconds = decodeAbiUint(typeof timelockDelayResult === 'string' ? timelockDelayResult : null)
+    const functionSelectors = readFunctionSelectors(codeValue)
+    const selectorCandidates = FUNCTION_CANDIDATES.filter((candidate) => functionSelectors.has(candidate.selector))
     const ownerAddress = decodeAbiAddress(typeof ownerResult === 'string' ? ownerResult : null)
     const ownerStatus = !ownerAddress ? 'not_exposed' as const : ownerAddress === ZERO_ADDRESS ? 'renounced' as const : 'active' as const
     const pausedValue = decodeAbiBoolean(typeof pausedResult === 'string' ? pausedResult : null)
@@ -167,6 +251,20 @@ export async function POST(request: Request) {
     const observations: Array<{ id: string; severity: 'info' | 'review'; title: string; detail: string }> = [
       { id: 'runtime-bytecode', severity: 'info', title: 'Runtime bytecode found', detail: `The Arc Mainnet RPC returned ${((codeValue.length - 2) / 2).toLocaleString()} bytes at the scanned address.` },
     ]
+    if (safeThreshold !== null) {
+      observations.push({ id: 'safe-threshold', severity: 'info', title: 'Safe-compatible signer threshold returned', detail: `The getter reported ${safeThreshold} approvals out of ${safeOwners.length} signer addresses. The scan does not verify the full wallet implementation or signer security.` })
+    }
+    if (timelockMinDelaySeconds !== null) {
+      observations.push({ id: 'timelock-delay', severity: timelockMinDelaySeconds === 0 ? 'review' : 'info', title: timelockMinDelaySeconds === 0 ? 'Timelock-style getter returned no delay' : 'Timelock-style minimum delay returned', detail: `getMinDelay() returned ${timelockMinDelaySeconds.toLocaleString()} seconds at the scanned block. This getter alone does not prove every privileged action is timelocked.` })
+    }
+    if (selectorCandidates.length) {
+      observations.push({
+        id: 'selector-candidates',
+        severity: selectorCandidates.some((candidate) => candidate.severity === 'review') ? 'review' : 'info',
+        title: 'Control-function selector candidates found',
+        detail: `${selectorCandidates.length} known function selector${selectorCandidates.length === 1 ? '' : 's'} appeared in runtime bytecode. A selector is a clue, not proof the function is reachable or what it does.`,
+      })
+    }
     if (token.isTokenLike) {
       observations.push({ id: 'token-surface', severity: 'info' as const, title: 'Token-like read methods responded', detail: `totalSupply() and decimals() returned values${token.symbol ? ` for ${token.symbol}` : ''}. This does not prove full ERC-20 compliance.` })
     }
@@ -208,6 +306,12 @@ export async function POST(request: Request) {
           implementationBytecodeBytes,
           admin,
           beacon,
+        },
+        controlSurface: {
+          safeThreshold,
+          safeOwners,
+          timelockMinDelaySeconds,
+          selectorCandidates,
         },
       },
       network: { name: ARC_NETWORK_NAME, chainId: ARC_CHAIN_ID },
