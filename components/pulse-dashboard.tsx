@@ -235,7 +235,7 @@ function PulseDashboardContent({ health, healthLoading, healthError }: { health?
 
   async function payAndScan(endpoint: string, headers: Record<string, string>, target: string) {
     if (!wallet || !paymentConfig?.enabled) throw new PulseApiError('payment_unavailable')
-    const storageKey = `pulse:deep-payment:${paymentConfig.chainId}:${scanType}:${target.toLowerCase()}:${wallet.address.toLowerCase()}`
+    const storageKey = `pulse:deep-payment:${paymentConfig.chainId}:${paymentConfig.contract ?? 'direct'}:${scanType}:${target.toLowerCase()}:${wallet.address.toLowerCase()}`
     let saved: { txHash?: string; signature?: string } = {}
     try {
       const raw = window.localStorage.getItem(storageKey)
@@ -248,7 +248,7 @@ function PulseDashboardContent({ health, healthLoading, healthError }: { health?
     // 1. Pay. The connected wallet only pays; it does not need to be linked to the account.
     if (!saved.txHash) {
       setDeepStatus('Approve the USDC payment in your wallet')
-      saved.txHash = await sendUsdcPayment(wallet, paymentConfig)
+      saved.txHash = await sendUsdcPayment(wallet, paymentConfig, { scanType, target })
       remember()
     }
     // 2. Sign once so the payment is tied to this account and this scan.
@@ -501,7 +501,7 @@ function PulseDashboardContent({ health, healthLoading, healthError }: { health?
                 </p>
                 <p className="mt-1 text-xs leading-5 text-pulse-muted">
                   {paymentConfig?.enabled
-                    ? `Costs ${paymentConfig.priceDisplay} USDC on ${paymentConfig.chainName}, plus network gas, paid to ${paymentConfig.receiver ? shortAddress(paymentConfig.receiver) : 'the Pulse wallet'}. Requires a connected wallet.`
+                    ? paymentConfig.contract && paymentConfig.receiver ? `Costs ${paymentConfig.priceDisplay} USDC on ${paymentConfig.chainName}, plus network gas. You pay the Pulse payment contract (${shortAddress(paymentConfig.contract)}), which passes it straight on to ${shortAddress(paymentConfig.receiver)}. Requires a connected wallet.` : `Costs ${paymentConfig.priceDisplay} USDC on ${paymentConfig.chainName}, plus network gas, paid to ${paymentConfig.receiver ? shortAddress(paymentConfig.receiver) : 'the Pulse wallet'}. Requires a connected wallet.`
                     : 'Deep scans are not enabled on this deployment yet.'}
                 </p>
               </div>
@@ -560,7 +560,7 @@ function PulseDashboardContent({ health, healthLoading, healthError }: { health?
         />
 
         <footer className="flex flex-col gap-3 border-t border-pulse-line pt-5 text-xs text-pulse-muted sm:flex-row sm:items-center sm:justify-between">
-          <p>Pulse for Arc · Arc Mainnet · Chain ID 5042</p>
+          <p>Pulse for Arc · Arc Mainnet · Chain ID 5042 · <a href="https://studio.arc.io" target="_blank" rel="noopener noreferrer" className="underline decoration-pulse-line underline-offset-4 transition hover:text-pulse-bone">Built with Arc Studio</a></p>
           <p className="flex items-center gap-2"><Clock3 aria-hidden="true" className="size-3.5" />Scans read public Arc data. Free scans never ask for a signature; a deep scan asks you to approve one small USDC payment.</p>
         </footer>
       </div>

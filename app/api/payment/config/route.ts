@@ -5,9 +5,9 @@ export const dynamic = 'force-dynamic'
 
 // Public payment settings the browser needs to build the deep-scan USDC transfer.
 export function GET() {
-  const { enabled, chainId, chainName, rpcUrl, explorerUrl, usdc, receiver, priceUnits, priceDisplay } = getPaymentConfig()
+  const { enabled, chainId, chainName, rpcUrl, explorerUrl, usdc, receiver, contract, priceUnits, priceNativeUnits, priceDisplay } = getPaymentConfig()
   return Response.json(
-    { enabled, chainId, chainName, rpcUrl, explorerUrl, usdc, receiver: enabled ? receiver : null, priceUnits, priceDisplay },
+    { enabled, chainId, chainName, rpcUrl, explorerUrl, usdc, receiver: enabled ? receiver : null, contract: enabled ? contract : null, priceUnits, priceNativeUnits, priceDisplay },
     { headers: { 'cache-control': 'no-store' } },
   )
 }

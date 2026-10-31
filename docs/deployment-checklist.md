@@ -13,6 +13,7 @@ Payments (Arc Mainnet, real USDC)
 - PULSE_PAYMENT_RPC_URL=https://rpc.mainnet.arc.io (public, sent to browsers: no API key)
 - PULSE_PAYMENT_EXPLORER_URL=https://explorer.arc.io
 - PULSE_PAYMENT_USDC_ADDRESS=0x3600000000000000000000000000000000000000
+- PULSE_PAYMENT_CONTRACT=0xa0f08Fb8adb9cBb7C08f251B7141975F72fE60ed (Arc Mainnet PulseScanPayments; leave unset to use a plain USDC transfer)
 - PULSE_DEEP_SCAN_PRICE_USDC (optional, default 0.001)
 
 RPC (recommended)
