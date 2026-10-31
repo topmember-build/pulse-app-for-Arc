@@ -1,10 +1,13 @@
 'use client'
 
+import { useState } from 'react'
 import { PrivyProvider } from '@privy-io/react-auth'
 
 export type PaymentChain = { chainId: number; chainName: string; rpcUrl: string; explorerUrl: string }
 
 export function PrivyAppProvider({ children, appId, paymentChain }: { children: React.ReactNode; appId?: string; paymentChain?: PaymentChain }) {
+  // Match the wallet window to the theme chosen when the page loaded.
+  const [theme] = useState<'light' | 'dark'>(() => (typeof document !== 'undefined' && document.documentElement.classList.contains('light') ? 'light' : 'dark'))
   // The payment network must be known to Privy so wallets can switch to it for deep-scan payments.
   const supportedChains = paymentChain
     ? [{
@@ -29,8 +32,8 @@ export function PrivyAppProvider({ children, appId, paymentChain }: { children: 
         loginMethods: ['wallet'],
         embeddedWallets: { ethereum: { createOnLogin: 'off' } },
         appearance: {
-          theme: 'dark',
-          accentColor: '#ff5a45',
+          theme,
+          accentColor: theme === 'light' ? '#c9301c' : '#ff5a45',
           landingHeader: 'Connect to Pulse',
           walletList: ['detected_ethereum_wallets', 'coinbase_wallet', 'metamask'],
         },
