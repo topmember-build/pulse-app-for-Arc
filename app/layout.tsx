@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from 'next'
 import { PrivyAppProvider } from './privy-provider'
+import { getPaymentConfig } from '@/lib/payment-config'
 import './globals.css'
+
+export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
   title: 'Pulse for Arc Mainnet — Live Token and Contract Analysis',
@@ -17,5 +20,7 @@ export const viewport: Viewport = {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en" className="dark"><body><PrivyAppProvider>{children}</PrivyAppProvider></body></html>
+  const payment = getPaymentConfig()
+  const paymentChain = { chainId: payment.chainId, chainName: payment.chainName, rpcUrl: payment.rpcUrl, explorerUrl: payment.explorerUrl }
+  return <html lang="en" className="dark"><body><PrivyAppProvider appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID} paymentChain={paymentChain}>{children}</PrivyAppProvider></body></html>
 }

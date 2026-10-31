@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { checkRateLimit } from '@/lib/rate-limit'
-import { getVerifiedPrivyWallet, WalletAuthError } from '@/lib/privy-auth'
+import { getOptionalPrivyWallet, WalletAuthError, type Caller } from '@/lib/privy-auth'
+import { claimPayment, completePayment, releasePayment } from '@/lib/payment'
+import { analyzeBytecode, mergeAnalyses } from '@/lib/deep-analysis'
 import { saveScanHistory } from '@/lib/scan-history'
+import { recordScanEvent } from '@/lib/scan-events'
 import { contractScanRequestSchema, contractScanSchema } from '@/lib/schemas'
 import { formatTokenAmount } from '@/lib/token-analysis'
 import { ARC_CHAIN_ID, ARC_NETWORK_NAME, ARC_NATIVE_CURRENCY } from '@/lib/arc-network'
@@ -114,15 +117,17 @@ function readFunctionSelectors(bytecode: string) {
 }
 
 async function saveHistory(
-  userId: string,
-  walletAddress: string,
+  caller: Caller | null,
   address: string,
+  deep: boolean,
   status: 'complete' | 'failed',
   summary: Record<string, unknown>,
 ) {
+  await recordScanEvent({ scanType: 'contract', deep, outcome: status, signedIn: caller !== null })
+  if (!caller) return
   await saveScanHistory({
-    walletAddress,
-    privyUserId: userId,
+    walletAddress: caller.walletAddress,
+    privyUserId: caller.userId,
     scanType: 'contract',
     targetAddress: address,
     status,
@@ -145,9 +150,9 @@ export async function POST(request: Request) {
     return response(requestId, { error: 'service_unavailable' }, 503)
   }
 
-  let verifiedWallet: Awaited<ReturnType<typeof getVerifiedPrivyWallet>>
+  let caller: Caller | null
   try {
-    verifiedWallet = await getVerifiedPrivyWallet(request, request.headers.get('x-pulse-wallet') ?? '')
+    caller = await getOptionalPrivyWallet(request)
   } catch (error) {
     const status = error instanceof WalletAuthError ? error.status : 503
     const code = error instanceof WalletAuthError ? error.code : 'auth_unavailable'
@@ -158,6 +163,24 @@ export async function POST(request: Request) {
   if (!parsed.success) return response(requestId, { error: 'invalid_input' }, 400)
 
   const address = parsed.data.address.toLowerCase()
+  const deep = parsed.data.deep === true
+
+  // Deep scans are paid: they need an onchain USDC payment, and the paying wallet signs for it.
+  // No account or sign-in is needed. A signed-in user also gets the result saved to history.
+  let paymentTx: string | null = null
+  if (deep) {
+    if (!parsed.data.paymentTxHash) return response(requestId, { error: 'payment_required' }, 402)
+    try {
+      const claim = await claimPayment({ txHash: parsed.data.paymentTxHash, privyUserId: caller?.userId ?? null, signature: parsed.data.paymentSignature, scanType: 'contract', targetAddress: address })
+      if (!claim.ok) return response(requestId, { error: claim.code }, claim.status)
+      if (claim.replay) return response(requestId, claim.replay)
+      paymentTx = parsed.data.paymentTxHash.toLowerCase()
+    } catch {
+      return response(requestId, { error: 'service_unavailable' }, 503)
+    }
+  }
+  let paymentCompleted = false
+
   try {
     const [chainIdValue, blockValue] = await Promise.all([
       callArcRpc<unknown>('eth_chainId', []),
@@ -165,8 +188,9 @@ export async function POST(request: Request) {
     ])
 
     if (parseRpcQuantity(chainIdValue) !== ARC_CHAIN_ID) {
-      await saveHistory(verifiedWallet.userId, verifiedWallet.walletAddress, address, 'failed', { error: 'wrong_network' }).catch(() => undefined)
+      await saveHistory(caller, address, deep, 'failed', { error: 'wrong_network' }).catch(() => undefined)
       console.info(JSON.stringify({ event: 'pulse.contract_scan.completed', requestId, outcome: 'wrong_network', durationMs: Date.now() - startedAt }))
+      if (paymentTx) await releasePayment(paymentTx).catch(() => undefined)
       return response(requestId, { error: 'wrong_network' }, 502)
     }
 
@@ -180,8 +204,9 @@ export async function POST(request: Request) {
 
     if (typeof codeValue !== 'string' || !/^0x(?:[0-9a-f]{2})*$/i.test(codeValue)) throw new Error('arc_rpc_invalid_code')
     if (codeValue === '0x') {
-      await saveHistory(verifiedWallet.userId, verifiedWallet.walletAddress, address, 'failed', { error: 'not_a_contract' }).catch(() => undefined)
+      await saveHistory(caller, address, deep, 'failed', { error: 'not_a_contract' }).catch(() => undefined)
       console.info(JSON.stringify({ event: 'pulse.contract_scan.completed', requestId, outcome: 'not_a_contract', durationMs: Date.now() - startedAt }))
+      if (paymentTx) await releasePayment(paymentTx).catch(() => undefined)
       return response(requestId, { error: 'not_a_contract' }, 422)
     }
 
@@ -317,6 +342,18 @@ export async function POST(request: Request) {
       network: { name: ARC_NETWORK_NAME, chainId: ARC_CHAIN_ID },
       coverage: { blockNumber, scannedAt: new Date().toISOString() },
       observations,
+      anonymous: caller === null,
+      deep: deep ? (() => {
+        const implementationAnalysis = typeof implementationCode === 'string' && implementationCode.length > 2 ? analyzeBytecode(implementationCode) : null
+        return {
+          scope: implementationAnalysis
+            ? 'Selector and opcode review of the proxy bytecode and its implementation bytecode.'
+            : 'Selector and opcode review of the contract runtime bytecode.',
+          windowBlocks: null,
+          implementationAnalyzed: implementationAnalysis !== null,
+          ...mergeAnalyses(analyzeBytecode(codeValue), implementationAnalysis),
+        }
+      })() : undefined,
       limitations: [
         'No verified source code, compiler metadata, audit, or complete bytecode analysis is checked.',
         'Only common owner() and paused() getters are sampled; role-based access controls and custom admin paths may be different.',
@@ -327,7 +364,7 @@ export async function POST(request: Request) {
 
     let historySaved = false
     try {
-      await saveHistory(verifiedWallet.userId, verifiedWallet.walletAddress, address, 'complete', {
+      await saveHistory(caller, address, deep, 'complete', {
         title: token.name ?? token.symbol ?? 'Contract profile scan',
         subtitle: `${resultCore.contract.bytecodeBytes.toLocaleString()} runtime bytes · ${proxyKind.replaceAll('_', ' ')}`,
         snapshot: { ...resultCore, historySaved: true },
@@ -338,11 +375,16 @@ export async function POST(request: Request) {
     }
 
     const result = contractScanSchema.parse({ ...resultCore, historySaved })
+    if (paymentTx) {
+      await completePayment(paymentTx, result as unknown as Record<string, unknown>)
+      paymentCompleted = true
+    }
     console.info(JSON.stringify({ event: 'pulse.contract_scan.completed', requestId, durationMs: Date.now() - startedAt, isContract: true, bytecodeBytes: result.contract.bytecodeBytes, historySaved }))
     return response(requestId, result)
   } catch (error) {
-    await saveHistory(verifiedWallet.userId, verifiedWallet.walletAddress, address, 'failed', { error: 'arc_rpc_unavailable' }).catch(() => undefined)
-    console.error(JSON.stringify({ event: 'pulse.contract_scan.failed', requestId, durationMs: Date.now() - startedAt, errorName: error instanceof Error ? error.name : 'unknown' }))
+    if (paymentTx && !paymentCompleted) await releasePayment(paymentTx).catch(() => undefined)
+    await saveHistory(caller, address, deep, 'failed', { error: 'arc_rpc_unavailable' }).catch(() => undefined)
+    console.error(JSON.stringify({ event: 'pulse.contract_scan.failed', requestId, durationMs: Date.now() - startedAt, errorName: error instanceof Error ? error.name : 'unknown', errorMessage: error instanceof Error ? error.message.slice(0, 120) : undefined }))
     return response(requestId, { error: 'arc_rpc_unavailable' }, 502)
   }
 }

@@ -2,8 +2,65 @@ import { z } from 'zod'
 
 const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/, 'Invalid EVM address')
 
-export const contractScanRequestSchema = z.object({ address })
-export const tokenScanRequestSchema = z.object({ address })
+const txHash = z.string().regex(/^0x[0-9a-fA-F]{64}$/)
+const scanRequest = z.object({ address, deep: z.boolean().optional(), paymentTxHash: txHash.optional(), paymentSignature: z.string().regex(/^0x[0-9a-fA-F]{130}$/).optional() })
+
+export const contractScanRequestSchema = scanRequest
+export const tokenScanRequestSchema = scanRequest
+
+export const holderAnalysisSchema = z.object({
+  basis: z.string(),
+  addressesSeen: z.number().int().nonnegative(),
+  walletsChecked: z.number().int().nonnegative(),
+  top10Pct: z.number().nullable(),
+  whales: z.array(z.object({
+    address,
+    balance: z.string(),
+    pct: z.number().nullable(),
+    isContract: z.boolean().nullable(),
+    clusterId: z.number().int().nullable(),
+  })),
+  bubbles: z.array(z.object({
+    address,
+    balance: z.string(),
+    pct: z.number().nullable(),
+    share: z.number().min(0).max(1),
+    isContract: z.boolean().nullable(),
+    clusterId: z.number().int().nullable(),
+  })).default([]),
+  links: z.array(z.object({
+    source: address,
+    target: address,
+    kind: z.enum(['transfer', 'funding']),
+    transferCount: z.number().int().nonnegative(),
+  })).default([]),
+  clusters: z.array(z.object({
+    id: z.number().int(),
+    memberCount: z.number().int().nonnegative(),
+    membersChecked: z.number().int().nonnegative(),
+    funder: address.nullable(),
+    combinedBalance: z.string(),
+    combinedPct: z.number().nullable(),
+    fromBlock: z.number().int().nonnegative(),
+    toBlock: z.number().int().nonnegative(),
+    evidence: z.string(),
+    members: z.array(address),
+  })),
+})
+
+export const deepScanSchema = z.object({
+  holders: holderAnalysisSchema.optional(),
+  scope: z.string(),
+  windowBlocks: z.number().int().nonnegative().nullable(),
+  implementationAnalyzed: z.boolean(),
+  capabilities: z.array(z.object({
+    id: z.string(),
+    label: z.string(),
+    severity: z.enum(['info', 'review']),
+    detail: z.string(),
+  })),
+  opcodes: z.object({ delegatecall: z.boolean(), selfdestruct: z.boolean(), create: z.boolean() }),
+})
 
 const networkSchema = z.object({ name: z.string(), chainId: z.number().int() })
 
@@ -65,7 +122,7 @@ export const tokenScanSchema = z.object({
     commonExitWalletCount: z.number().int().nonnegative(),
     evidence: z.array(z.string()),
     severity: z.enum(['medium', 'info']),
-  })),
+  })).default([]),
   bundleSignals: z.array(z.object({
     id: z.string(),
     kind: z.enum(['single_transaction_fanout', 'same_block_burst']),
@@ -76,14 +133,14 @@ export const tokenScanSchema = z.object({
     transferCount: z.number().int().positive(),
     matchingAmountPct: z.number().min(0).max(100),
     evidence: z.string(),
-  })),
+  })).default([]),
   circularFlows: z.array(z.object({
     id: z.string(),
     addresses: z.array(address).length(3),
     firstBlock: z.number().int().nonnegative(),
     lastBlock: z.number().int().nonnegative(),
     evidence: z.string(),
-  })),
+  })).default([]),
   transfers: z.array(z.object({
     blockNumber: z.number().int().nonnegative(),
     transactionHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
@@ -96,6 +153,8 @@ export const tokenScanSchema = z.object({
   })),
   scannedAt: z.string().datetime(),
   historySaved: z.boolean(),
+  anonymous: z.boolean().optional(),
+  deep: deepScanSchema.optional(),
 })
 
 export const contractScanSchema = z.object({
@@ -146,6 +205,8 @@ export const contractScanSchema = z.object({
   })),
   limitations: z.array(z.string()),
   historySaved: z.boolean(),
+  anonymous: z.boolean().optional(),
+  deep: deepScanSchema.optional(),
 })
 
 export const scanHistoryEntrySchema = z.object({

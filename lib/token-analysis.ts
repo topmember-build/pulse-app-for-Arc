@@ -286,6 +286,7 @@ export function analyzeTokenTransfers(input: {
   toBlock: number
   totalSupply: bigint | null
   decimals: number | null
+  includeLinkage?: boolean
 }) {
   const { events, totalObserved, invalidEvents, fromBlock, toBlock, totalSupply, decimals } = input
   const senders = new Set<string>()
@@ -329,9 +330,11 @@ export function analyzeTokenTransfers(input: {
   const mintedSupplyPct = totalSupply && totalSupply > BigInt(0) ? percentage(mintedAmount, totalSupply) : null
   const largestTransferPct = percentage(largestTransfer, totalAmount)
   const topRecipientSharePct = percentage(topRecipientAmount, inboundAmount)
-  const clusters = analyzeSharedSourceClusters(events, totalSupply, decimals)
-  const bundleSignals = analyzeSameBlockBursts(events)
-  const circularFlows = analyzeCircularFlows(events)
+  // Wallet-linking analysis (clusters, bundles, circular flows) is a deep-scan feature.
+  const includeLinkage = input.includeLinkage !== false
+  const clusters = includeLinkage ? analyzeSharedSourceClusters(events, totalSupply, decimals) : []
+  const bundleSignals = includeLinkage ? analyzeSameBlockBursts(events) : []
+  const circularFlows = includeLinkage ? analyzeCircularFlows(events) : []
   const signals: Array<{ id: string; severity: 'high' | 'medium' | 'info'; title: string; evidence: string; points: number }> = []
 
   if (mintedAmount > BigInt(0)) {

@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { desc, eq, sql } from 'drizzle-orm'
 import { ARC_NETWORK_NAME } from '@/lib/arc-network'
 import { db } from '@/lib/db'
 import { pulseScanHistory } from '@/lib/db-schema'
@@ -7,7 +7,7 @@ export type PulseScanType = 'token' | 'contract'
 export type PulseScanStatus = 'complete' | 'failed'
 
 export async function saveScanHistory(input: {
-  walletAddress: string
+  walletAddress: string | null
   privyUserId: string
   scanType: PulseScanType
   targetAddress: string
@@ -15,7 +15,7 @@ export async function saveScanHistory(input: {
   summary: Record<string, unknown>
 }) {
   await db.insert(pulseScanHistory).values({
-    walletAddress: input.walletAddress.toLowerCase(),
+    walletAddress: input.walletAddress ? input.walletAddress.toLowerCase() : null,
     privyUserId: input.privyUserId,
     scanType: input.scanType,
     targetAddress: input.targetAddress.toLowerCase(),
@@ -25,7 +25,7 @@ export async function saveScanHistory(input: {
   })
 }
 
-export async function listScanHistory(walletAddress: string, privyUserId: string) {
+export async function listScanHistory(privyUserId: string) {
   return db
     .select({
       id: pulseScanHistory.id,
@@ -41,10 +41,7 @@ export async function listScanHistory(walletAddress: string, privyUserId: string
       createdAt: pulseScanHistory.createdAt,
     })
     .from(pulseScanHistory)
-    .where(and(
-      eq(pulseScanHistory.walletAddress, walletAddress.toLowerCase()),
-      eq(pulseScanHistory.privyUserId, privyUserId),
-    ))
+    .where(eq(pulseScanHistory.privyUserId, privyUserId))
     .orderBy(desc(pulseScanHistory.createdAt))
     .limit(25)
 }

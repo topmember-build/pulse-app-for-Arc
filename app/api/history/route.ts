@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { checkRateLimit } from '@/lib/rate-limit'
-import { getVerifiedPrivyWallet, WalletAuthError } from '@/lib/privy-auth'
+import { getPrivyCaller, WalletAuthError } from '@/lib/privy-auth'
 import { listScanHistory } from '@/lib/scan-history'
 
 export const runtime = 'nodejs'
@@ -24,10 +24,9 @@ export async function GET(request: Request) {
     return Response.json({ error: 'service_unavailable' }, { status: 503, headers: responseHeaders })
   }
 
-  const walletAddress = new URL(request.url).searchParams.get('wallet') ?? ''
-  let verifiedWallet: Awaited<ReturnType<typeof getVerifiedPrivyWallet>>
+  let verifiedWallet: Awaited<ReturnType<typeof getPrivyCaller>>
   try {
-    verifiedWallet = await getVerifiedPrivyWallet(request, walletAddress)
+    verifiedWallet = await getPrivyCaller(request)
   } catch (error) {
     const status = error instanceof WalletAuthError ? error.status : 503
     const code = error instanceof WalletAuthError ? error.code : 'auth_unavailable'
@@ -35,7 +34,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const scans = await listScanHistory(verifiedWallet.walletAddress, verifiedWallet.userId)
+    const scans = await listScanHistory(verifiedWallet.userId)
     console.info(JSON.stringify({ event: 'pulse.scan_history.read', requestId, durationMs: Date.now() - startedAt, resultCount: scans.length }))
     return Response.json({ scans }, { headers: responseHeaders })
   } catch (error) {

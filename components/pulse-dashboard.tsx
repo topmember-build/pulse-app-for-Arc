@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent, type KeyboardEvent } from 'react'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
-import useSWR from 'swr'
+import useSWR, { mutate as mutateCache } from 'swr'
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Search,
   Shield,
+  Sparkles,
   Wallet,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -34,6 +35,9 @@ import {
 import { ContractScanResults, TokenScanResults } from '@/components/scan-results'
 import { ScanHistory } from '@/components/scan-history'
 import { PulseHeart } from '@/components/pulse-heart'
+import { ScanStats } from '@/components/scan-stats'
+import { fetchPaymentConfig, PaymentRejectedError, sendUsdcPayment, signPaymentMessage } from '@/lib/payment-client'
+import { paymentMessage } from '@/lib/payment-message'
 
 type ScanType = 'token' | 'contract'
 type HealthResponse = {
@@ -54,6 +58,13 @@ type ApiErrorCode =
   | 'not_a_contract'
   | 'arc_rpc_unavailable'
   | 'history_unavailable'
+  | 'payment_required'
+  | 'payment_pending'
+  | 'payment_invalid'
+  | 'payment_already_used'
+  | 'payment_in_progress'
+  | 'payment_unavailable'
+  | 'payment_signature_invalid'
   | 'unknown'
 
 class PulseApiError extends Error {
@@ -70,6 +81,14 @@ function PulseMark({ className = '' }: { className?: string }) {
       <polyline points="0,9 8,9 10,6 13,14 16,1 19,11 21,9 30,9" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   )
+}
+
+// Pasted text (especially on mobile) can carry spaces, zero-width characters or a label.
+// Extract a single standalone 0x + 40 hex address; longer hex strings such as tx hashes are rejected.
+function normalizeAddress(raw: string): string {
+  const cleaned = raw.replace(/[\s\u200B-\u200D\u2060\uFEFF]/g, '')
+  const match = cleaned.match(/0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/)
+  return match ? match[0] : cleaned
 }
 
 async function fetchHealth(url: string): Promise<HealthResponse> {
@@ -102,6 +121,13 @@ function friendlyError(error: unknown) {
     case 'not_a_contract': return 'No contract bytecode was found at that address on Arc Mainnet.'
     case 'arc_rpc_unavailable': return 'Arc Mainnet RPC could not complete this scan. Try again shortly.'
     case 'history_unavailable': return 'Scan history is temporarily unavailable.'
+    case 'payment_required': return 'A deep scan needs a USDC payment first.'
+    case 'payment_pending': return 'The payment is still confirming onchain. Press Deep scan again in a moment; you will not be charged twice.'
+    case 'payment_invalid': return 'The payment could not be verified: it failed, went to a different recipient, or was too small.'
+    case 'payment_already_used': return 'That payment was already used for a deep scan. Start a new deep scan to pay again.'
+    case 'payment_in_progress': return 'A deep scan is already running for this payment. Wait a moment and try again.'
+    case 'payment_signature_invalid': return 'The payment could not be matched to your signature. Approve the signature request in your wallet and try again; you will not be charged twice.'
+    case 'payment_unavailable': return 'Deep scan payments are not available right now.'
     default: return 'The request could not be completed. Try again.'
   }
 }
@@ -172,6 +198,8 @@ function PulseDashboardContent({ health, healthLoading, healthError }: { health?
   const [isHistorical, setIsHistorical] = useState(false)
   const [scanError, setScanError] = useState('')
   const [scanning, setScanning] = useState(false)
+  const [deepStatus, setDeepStatus] = useState('')
+  const { data: paymentConfig } = useSWR('/api/payment/config', () => fetchPaymentConfig(), { revalidateOnFocus: false })
   const [copied, setCopied] = useState(false)
 
   const wallet = wallets.find((item) => item.address.toLowerCase() === selectedAddress.toLowerCase())
@@ -179,17 +207,15 @@ function PulseDashboardContent({ health, healthLoading, healthError }: { health?
     ?? wallets[0]
   const walletAddress = wallet?.address
   const userId = user?.id
-  const historyKey = authenticated && walletAddress && userId
-    ? ['/api/history', userId, walletAddress.toLowerCase()] as const
-    : null
+  const historyKey = authenticated && userId ? ['/api/history', userId] as const : null
 
   const { data: historyData, error: historyError, isLoading: historyLoading, mutate: refreshHistory } = useSWR(
     historyKey,
-    async ([path, _userId, addressKey]) => {
+    async ([path]) => {
       const accessToken = await getAccessToken()
       if (!accessToken) throw new PulseApiError('authentication_required')
-      const response = await fetch(`${path}?wallet=${encodeURIComponent(addressKey)}`, {
-        headers: { authorization: `Bearer ${accessToken}`, 'x-pulse-wallet': addressKey },
+      const response = await fetch(path, {
+        headers: { authorization: `Bearer ${accessToken}` },
         cache: 'no-store',
       })
       const body = await parseApiResponse<unknown>(response)
@@ -202,50 +228,103 @@ function PulseDashboardContent({ health, healthLoading, healthError }: { health?
     if (event.key === 'Enter' && (event.nativeEvent.isComposing || event.keyCode === 229)) event.preventDefault()
   }
 
-  async function handleScan(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  async function postScan(endpoint: string, headers: Record<string, string>, payload: unknown) {
+    const response = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payload), cache: 'no-store' })
+    return parseApiResponse<unknown>(response)
+  }
+
+  async function payAndScan(endpoint: string, headers: Record<string, string>, target: string) {
+    if (!wallet || !paymentConfig?.enabled) throw new PulseApiError('payment_unavailable')
+    const storageKey = `pulse:deep-payment:${paymentConfig.chainId}:${scanType}:${target.toLowerCase()}:${wallet.address.toLowerCase()}`
+    let saved: { txHash?: string; signature?: string } = {}
+    try {
+      const raw = window.localStorage.getItem(storageKey)
+      if (raw) saved = raw.startsWith('{') ? JSON.parse(raw) : { txHash: raw }
+    } catch {
+      saved = {}
+    }
+    const remember = () => window.localStorage.setItem(storageKey, JSON.stringify(saved))
+
+    // 1. Pay. The connected wallet only pays; it does not need to be linked to the account.
+    if (!saved.txHash) {
+      setDeepStatus('Approve the USDC payment in your wallet')
+      saved.txHash = await sendUsdcPayment(wallet, paymentConfig)
+      remember()
+    }
+    // 2. Sign once so the payment is tied to this account and this scan.
+    if (!saved.signature) {
+      setDeepStatus('Sign to confirm this payment is yours (free, no gas)')
+      saved.signature = await signPaymentMessage(wallet, paymentMessage({ txHash: saved.txHash, scanType, target, chainId: paymentConfig.chainId }))
+      remember()
+    }
+    // 3. The server verifies the payment onchain, then runs the scan.
+    setDeepStatus('Verifying the payment onchain')
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      try {
+        const body = await postScan(endpoint, headers, { address: target, deep: true, paymentTxHash: saved.txHash, paymentSignature: saved.signature })
+        window.localStorage.removeItem(storageKey)
+        return body
+      } catch (error) {
+        if (error instanceof PulseApiError && error.code === 'payment_pending') {
+          await new Promise((resolve) => window.setTimeout(resolve, 2000))
+          continue
+        }
+        if (error instanceof PulseApiError && (error.code === 'payment_already_used' || error.code === 'payment_invalid')) window.localStorage.removeItem(storageKey)
+        throw error
+      }
+    }
+    throw new PulseApiError('payment_pending')
+  }
+
+  async function runScan(deep: boolean) {
     setScanError('')
+    setDeepStatus('')
     setResult(null)
     setResultType(null)
     setIsHistorical(false)
 
-    if (!ADDRESS_PATTERN.test(address.trim())) {
+    const target = normalizeAddress(address)
+    if (!ADDRESS_PATTERN.test(target)) {
       setScanError('Enter a valid 42-character EVM contract address.')
       return
     }
-    if (!ready) {
-      setScanError('Privy is still initializing. Try again in a moment.')
-      return
-    }
-    if (!authenticated) {
-      setScanError('Connect a wallet before starting a scan.')
-      login()
-      return
-    }
-    if (!walletAddress) {
-      setScanError('No linked EVM wallet is available for this Privy account yet.')
-      return
+    if (deep) {
+      if (!ready) {
+        setScanError('Privy is still initializing. Try again in a moment.')
+        return
+      }
+      if (!authenticated || wallets.length === 0) {
+        setScanError('Connect a wallet to pay for the deep scan.')
+        login()
+        return
+      }
+      if (!wallet) {
+        setScanError('Connect a wallet to pay for the deep scan.')
+        return
+      }
+      if (!paymentConfig?.enabled) {
+        setScanError('Deep scans are not enabled on this deployment yet.')
+        return
+      }
     }
 
     setScanning(true)
     try {
-      const accessToken = await getAccessToken()
-      if (!accessToken) throw new PulseApiError('authentication_required')
       const endpoint = scanType === 'token' ? '/api/scan/token' : '/api/scan/contract'
       const requestSchema = scanType === 'token' ? tokenScanRequestSchema : contractScanRequestSchema
-      const validation = requestSchema.safeParse({ address: address.trim() })
+      const validation = requestSchema.safeParse({ address: target })
       if (!validation.success) throw new PulseApiError('invalid_input')
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${accessToken}`,
-          'x-pulse-wallet': walletAddress,
-        },
-        body: JSON.stringify(validation.data),
-        cache: 'no-store',
-      })
-      const body = await parseApiResponse<unknown>(response)
+
+      // Basic scans are open to everyone. Signing in only adds saved history.
+      const headers: Record<string, string> = { 'content-type': 'application/json' }
+      if (ready && authenticated) {
+        const accessToken = await getAccessToken()
+        if (!accessToken) throw new PulseApiError('authentication_required')
+        headers.authorization = `Bearer ${accessToken}`
+        if (walletAddress) headers['x-pulse-wallet'] = walletAddress
+      }
+
+      const body = deep ? await payAndScan(endpoint, headers, target) : await postScan(endpoint, headers, validation.data)
       if (scanType === 'token') {
         const parsed = tokenScanSchema.safeParse(body)
         if (!parsed.success) throw new Error('The token scan response was incomplete. No result was displayed.')
@@ -256,12 +335,20 @@ function PulseDashboardContent({ health, healthLoading, healthError }: { health?
         setResult(parsed.data)
       }
       setResultType(scanType)
-      void refreshHistory().catch(() => undefined)
+      if (authenticated) void refreshHistory().catch(() => undefined)
+      void mutateCache((key) => (Array.isArray(key) && key[0] === '/api/stats') || key === '/api/stats/overview')
     } catch (error) {
-      setScanError(error instanceof PulseApiError ? friendlyError(error) : error instanceof Error ? error.message : friendlyError(error))
+      if (error instanceof PaymentRejectedError) setScanError('The payment was cancelled. Nothing was charged.')
+      else setScanError(error instanceof PulseApiError ? friendlyError(error) : error instanceof Error ? error.message : friendlyError(error))
     } finally {
       setScanning(false)
+      setDeepStatus('')
     }
+  }
+
+  function handleScan(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    void runScan(false)
   }
 
   async function copyWallet() {
@@ -329,7 +416,7 @@ function PulseDashboardContent({ health, healthLoading, healthError }: { health?
             {authenticated && walletAddress ? (
               <div className="hidden items-center gap-1.5 rounded-lg border border-pulse-line bg-pulse-panel px-2 py-1 sm:flex">
                 {wallets.length > 1 ? (
-                  <label className="sr-only" htmlFor="wallet-select">Select a linked wallet</label>
+                  <label className="sr-only" htmlFor="wallet-select">Select a connected wallet</label>
                 ) : null}
                 {wallets.length > 1 ? (
                   <select id="wallet-select" value={walletAddress} onChange={(event) => setSelectedAddress(event.target.value)} className="max-w-36 bg-transparent px-1 py-1 text-xs text-pulse-bone outline-none" aria-label="Select linked wallet">
@@ -354,7 +441,7 @@ function PulseDashboardContent({ health, healthLoading, healthError }: { health?
             <p className="mt-4 max-w-2xl text-sm leading-6 text-pulse-muted sm:text-base">Pulse draws token movement as a living heart. Blue veins bring transfers in, coral arteries carry them out, and amber means look twice. Read the plain-language signal first, then open the evidence.</p>
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <a href="#scanner" className="inline-flex min-h-12 items-center justify-center rounded-lg border border-pulse-accent bg-pulse-accent px-5 text-sm font-semibold text-pulse-bg transition hover:brightness-110">Start a live scan</a>
-              <span className="text-xs text-pulse-muted">Read-only Arc RPC · no transaction signing</span>
+              <span className="text-xs text-pulse-muted">Free scans read-only · deep scans ask for a small payment</span>
             </div>
           </div>
           <div className="pulse-heart-stage overflow-hidden rounded-xl border border-pulse-line px-4 pt-4 sm:px-6">
@@ -395,19 +482,38 @@ function PulseDashboardContent({ health, healthLoading, healthError }: { health?
               <div className="flex flex-col gap-2">
                 <label htmlFor="contract-address" className="text-sm font-medium">{scanType === 'token' ? 'ERC-20 token address' : 'Smart contract address'}</label>
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  <input id="contract-address" name="address" type="text" inputMode="text" autoComplete="off" spellCheck={false} placeholder="0x followed by 40 hex characters" value={address} onChange={(event) => { setAddress(event.target.value); if (scanError) setScanError('') }} onKeyDown={handleInputKeyDown} aria-invalid={Boolean(scanError) && !ADDRESS_PATTERN.test(address.trim())} aria-describedby="scan-guidance scan-feedback" aria-errormessage="scan-feedback" className="min-h-12 min-w-0 flex-1 rounded-xl border border-pulse-line bg-pulse-bg px-4 font-mono text-sm text-pulse-bone placeholder:text-pulse-muted/65 outline-none transition focus:border-pulse-accent focus:ring-2 focus:ring-pulse-accent/20 aria-invalid:border-rose-300/70" />
-                  <Button type="submit" size="lg" disabled={scanning || !ready} className="min-h-12 gap-2 px-5">
-                    {scanning ? <><LoaderCircle className="animate-spin" data-icon="inline-start" />Scanning Arc</> : <><Search data-icon="inline-start" />{authenticated ? 'Run live scan' : 'Connect wallet'}</>}
+                  <input id="contract-address" name="address" type="text" inputMode="text" autoComplete="off" spellCheck={false} placeholder="0x followed by 40 hex characters" value={address} onChange={(event) => { setAddress(event.target.value); if (scanError) setScanError('') }} onKeyDown={handleInputKeyDown} aria-invalid={Boolean(scanError) && !ADDRESS_PATTERN.test(normalizeAddress(address))} aria-describedby="scan-guidance scan-feedback" aria-errormessage="scan-feedback" className="min-h-12 min-w-0 flex-1 rounded-xl border border-pulse-line bg-pulse-bg px-4 font-mono text-sm text-pulse-bone placeholder:text-pulse-muted/65 outline-none transition focus:border-pulse-accent focus:ring-2 focus:ring-pulse-accent/20 aria-invalid:border-rose-300/70" />
+                  <Button type="submit" size="lg" disabled={scanning} className="min-h-12 gap-2 px-5">
+                    {scanning ? <><LoaderCircle className="animate-spin" data-icon="inline-start" />Scanning Arc</> : <><Search data-icon="inline-start" />Run live scan</>}
                   </Button>
                 </div>
                 <p id="scan-guidance" className="text-xs leading-5 text-pulse-muted">{scanType === 'token' ? 'Reads recent ERC-20 transfers, then checks for shared-source fan-out, matching amounts, same-block bursts, and circular movement.' : 'Reads bytecode, token metadata, ownership/pause getters, proxy storage slots, and native balance when exposed.'} A connected Privy wallet is required to run scans and save private history.</p>
                 <div id="scan-feedback" role="status" aria-live="polite" className="min-h-5 text-sm text-rose-200">{scanError}</div>
               </div>
             </form>
+            <div className="mt-4 flex flex-col gap-3 rounded-xl border border-pulse-line bg-pulse-bg/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-sm font-medium"><Sparkles aria-hidden="true" className="size-4 text-pulse-accent" />Deep scan</p>
+                <p className="mt-1 text-xs leading-5 text-pulse-muted">
+                  {scanType === 'token'
+                    ? 'Looks back 10,000 blocks instead of 2,500, maps whale wallets and linked wallet clusters, and reviews the token bytecode for mint, pause, blacklist and upgrade controls.'
+                    : 'Reviews the contract bytecode, and its implementation if it is a proxy, for mint, pause, blacklist, upgrade and role controls.'}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-pulse-muted">
+                  {paymentConfig?.enabled
+                    ? `Costs ${paymentConfig.priceDisplay} USDC on ${paymentConfig.chainName}, plus network gas, paid to ${paymentConfig.receiver ? shortAddress(paymentConfig.receiver) : 'the Pulse wallet'}. Requires a connected wallet.`
+                    : 'Deep scans are not enabled on this deployment yet.'}
+                </p>
+              </div>
+              <Button type="button" variant="outline" size="lg" onClick={() => { void runScan(true) }} disabled={scanning || !paymentConfig?.enabled} className="min-h-12 shrink-0 gap-2 px-5">
+                {scanning && deepStatus ? <><LoaderCircle className="animate-spin" data-icon="inline-start" />Working</> : <><Sparkles data-icon="inline-start" />{authenticated || !paymentConfig?.enabled ? `Deep scan${paymentConfig?.enabled ? ` · ${paymentConfig.priceDisplay} USDC` : ''}` : 'Connect wallet to deep scan'}</>}
+              </Button>
+            </div>
+            {deepStatus ? <p role="status" className="mt-2 flex items-center gap-2 text-xs text-pulse-bone"><LoaderCircle aria-hidden="true" className="size-3.5 animate-spin text-pulse-accent" />{deepStatus}</p> : null}
             {authenticated && walletAddress ? (
-              <p className="mt-2 flex items-center gap-2 text-xs text-pulse-muted"><Shield aria-hidden="true" className="size-3.5 text-emerald-300" />Read-only scan. Pulse never asks for a seed phrase, signs a message, or submits a transaction.</p>
+              <p className="mt-2 flex items-center gap-2 text-xs text-pulse-muted"><Shield aria-hidden="true" className="size-3.5 text-emerald-300" />Basic scans are read-only and saved to your history. A deep scan asks you to approve one USDC transfer, nothing else.</p>
             ) : (
-              <p className="mt-2 flex items-center gap-2 text-xs text-pulse-muted"><Wallet aria-hidden="true" className="size-3.5 text-pulse-accent" />Connect with Privy to associate scans with your account.</p>
+              <p className="mt-2 flex items-center gap-2 text-xs text-pulse-muted"><Wallet aria-hidden="true" className="size-3.5 text-pulse-accent" />Basic scans work without an account. Connect a wallet to save your history and unlock deep scans.</p>
             )}
           </div>
 
@@ -431,32 +537,39 @@ function PulseDashboardContent({ health, healthLoading, healthError }: { health?
         </section>
 
         {tokenResult ? (
-          <TokenScanResults result={tokenResult} historical={isHistorical} onScanContract={() => { setScanType('contract'); setAddress(tokenResult.token.address); setResult(null); setResultType(null); setIsHistorical(false); document.getElementById('scanner')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }} />
+          <TokenScanResults result={tokenResult} historical={isHistorical} onDeepScan={() => { void runScan(true) }} onScanContract={() => { setScanType('contract'); setAddress(tokenResult.token.address); setResult(null); setResultType(null); setIsHistorical(false); document.getElementById('scanner')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }} />
         ) : null}
         {contractResult ? (
-          <ContractScanResults result={contractResult} historical={isHistorical} onScanToken={() => { setScanType('token'); setAddress(contractResult.contract.address); setResult(null); setResultType(null); setIsHistorical(false); document.getElementById('scanner')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }} />
+          <ContractScanResults result={contractResult} historical={isHistorical} onDeepScan={() => { void runScan(true) }} onScanToken={() => { setScanType('token'); setAddress(contractResult.contract.address); setResult(null); setResultType(null); setIsHistorical(false); document.getElementById('scanner')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }} />
         ) : null}
+
+        <ScanStats
+          enabled={authenticated}
+          userKey={userId}
+          getAccessToken={getAccessToken}
+          onSelectTarget={(target, type) => { setScanType(type); setAddress(target); setResult(null); setResultType(null); setIsHistorical(false); setScanError(''); document.getElementById('scanner')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}
+        />
 
         <ScanHistory
           entries={historyData?.scans ?? []}
           loading={historyLoading}
           error={historyError ? friendlyError(historyError) : ''}
-          enabled={authenticated && Boolean(walletAddress)}
+          enabled={authenticated}
           onOpen={openHistoryEntry}
           onRefresh={() => { void refreshHistory() }}
         />
 
         <footer className="flex flex-col gap-3 border-t border-pulse-line pt-5 text-xs text-pulse-muted sm:flex-row sm:items-center sm:justify-between">
           <p>Pulse for Arc · Arc Mainnet · Chain ID 5042</p>
-          <p className="flex items-center gap-2"><Clock3 aria-hidden="true" className="size-3.5" />Read-only public chain data. No transaction signing.</p>
+          <p className="flex items-center gap-2"><Clock3 aria-hidden="true" className="size-3.5" />Scans read public Arc data. Free scans never ask for a signature; a deep scan asks you to approve one small USDC payment.</p>
         </footer>
       </div>
     </main>
   )
 }
 
-export function PulseDashboard() {
-  const hasPrivyAppId = Boolean(process.env.NEXT_PUBLIC_PRIVY_APP_ID)
+export function PulseDashboard({ privyConfigured }: { privyConfigured: boolean }) {
+  const hasPrivyAppId = privyConfigured
   const { data: health, isLoading: healthLoading, error: healthError } = useSWR('/api/health', fetchHealth, {
     refreshInterval: 60_000,
     revalidateOnFocus: true,
