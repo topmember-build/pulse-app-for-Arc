@@ -40,7 +40,7 @@ export function ScanHistory({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-pulse-line p-4 sm:p-5">
         <div className="flex items-center gap-3">
           <span className="grid size-9 place-items-center rounded-xl border border-pulse-line bg-pulse-bg text-pulse-accent"><Database aria-hidden="true" className="size-4" /></span>
-          <div><h2 id="history-heading" className="text-sm font-semibold">Your scan history</h2><p className="mt-1 text-xs text-pulse-muted">Private to the signed-in Privy account and linked wallet</p></div>
+          <div><h2 id="history-heading" className="text-sm font-semibold">Your scan history</h2><p className="mt-1 text-xs text-pulse-muted">Private to your signed-in account</p></div>
         </div>
         {enabled ? <Button type="button" variant="ghost" size="sm" onClick={onRefresh}><RefreshCw data-icon="inline-start" />Refresh</Button> : null}
       </div>

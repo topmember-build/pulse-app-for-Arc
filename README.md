@@ -1,89 +1,81 @@
 # Pulse for Arc
 
-Pulse is an Arc Mainnet beta scanner that turns token and contract addresses into evidence-focused reports, with scan coverage and limitations made explicit.
+Pulse is a plain-language safety checker for tokens and smart contracts on Arc. Paste an address and get a clear verdict, the reasons behind it, and what to do next, written for people who are not blockchain experts.
 
-The Next.js App Router backend uses Privy for wallet authentication and Arc Mainnet JSON-RPC for read-only scans. It defaults to the official public endpoint, verifies chain ID 5042, and accepts an optional server-side `ARC_RPC_URL` override. Payment settlement is not enabled.
+- **Free scans** need no wallet and no account.
+- **Deep scans** cost a small USDC payment (0.001 USDC by default). They add whale wallets, linked-wallet clusters, bundle patterns, an animated heart map of who holds the token, and a review of admin controls such as mint, pause, blacklist and upgrade functions.
 
-## Product status
+Pulse reads public Arc data. It cannot prove anything is safe and it does not look at the people behind a project. Nothing here is financial advice.
 
-**Current milestone: Arc Mainnet read-only scanning beta.**
+## How it works for users
 
-Implemented:
+1. Open the app and paste a token or contract address.
+2. Press **Run live scan**. No sign-in is needed.
+3. Read the summary: **No major red flags found**, **Be careful**, **High risk** or **Not enough information**, with short reasons and a "What do these words mean?" glossary.
+4. For a closer look, press **Deep scan**. Connect a wallet, approve one small USDC transfer, and sign a free message. The server checks the payment onchain, then runs the scan.
 
-- Privy wallet/email login with server-side wallet verification.
-- Arc Mainnet token scans for metadata and ERC-20 Transfer events in the latest 500-block window, with rule-based transfer flags.
-- Arc Mainnet contract checks for runtime bytecode and native USDC balance.
-- Authenticated scan history, route-level rate limits, and a database/RPC health check.
-- Mainnet chain-ID verification and structured request logging.
-- The live scanner is separate from the synthetic token replay and illustrative landing-page scenarios.
+Signed-in users also get saved scan history and personal analytics. Anonymous scans are only counted (type, outcome and date), never stored with an address or IP.
 
-Not yet included:
+## What is checked
 
-- Full historical indexing, current token-holder balances, liquidity, honeypot, and sellability analysis.
-- Contract source verification, ownership/role/proxy analysis, and transaction or failed-call history.
-- USDC payment creation, settlement, and payment verification.
-- A dedicated RPC service with production quotas/SLAs, external error monitoring, and broad automated integration/security tests.
+Free scans:
+- Recent ERC-20 transfer activity (2,500 blocks): large moves, recent minting, concentrated recipients.
+- Contract profile: runtime bytecode, owner and pause getters, proxy patterns, Safe multi-signature and timelock hints, and common admin-function selectors.
 
-The animated token replay and landing-page risk scenarios are synthetic examples, not Mainnet evidence. Do not describe the application as fully production-ready until the remaining analysis, operational, and security work has been implemented and tested.
+Deep scans add:
+- A 10,000-block transfer window.
+- The largest wallets by live balance, with contracts told apart from wallets.
+- Linked-wallet clusters, same-block bundles, and circular transfers.
+- A bytecode review for mint, burn, pause, blacklist, upgrade and role controls.
+- An animated heart map: the heart is the token, each wallet is a blood cell, and amber rings mark linked clusters.
+
+Limits to keep in mind:
+- Only wallets active inside the scan window are examined. This is not a full holder list.
+- Clusters and bundles are patterns, not proof that one person controls the wallets.
+- Liquidity, honeypot and sellability checks, and source-code verification, are not included.
+
+## Tech stack
+
+- Next.js (App Router) and React, TypeScript, Tailwind CSS
+- Privy, used only as a wallet connection (no email login, no created wallets)
+- Arc JSON-RPC over HTTP, with optional dedicated provider
+- Postgres through Drizzle ORM and `pg` (scan history, payments, rate limits, counters)
+- `viem` for signature verification
 
 ## Repository layout
 
 ```text
 app/
-  api/health/route.ts          Database and Arc Mainnet RPC health check
-  api/scan/contract/route.ts   Live contract RPC scan endpoint
-  api/scan/token/route.ts      Live ERC-20 transfer scan endpoint
-  layout.tsx                   Root metadata and Privy provider shell
-  page.tsx                     Next.js entry page
-  privy-provider.tsx           Privy client integration and wallet bridge
-
-public/pulse/
-  index.html                   Pulse scanner markup
-  style.css                    Visual system and responsive styles
-  js/app.js                    Scanner state, controls, and account bridge
-  js/config.js                 Client-side scanner configuration
-  js/contracts.js              Contract finding weights and verdict labels
-  js/heart.js                  Visualization renderer
-  js/landing.js                Landing-page behavior and illustrative examples
-  js/sim.js                    Synthetic token demo playback data
-
-lib/
-  arc-network.ts               Shared Arc Mainnet constants
-  arc-rpc.ts                   Server-side RPC endpoint override
-  env.ts                       Server environment validation
-  schemas.ts                   API request and response schemas
+  api/scan/token/        Token scan endpoint (free and deep)
+  api/scan/contract/     Contract scan endpoint (free and deep)
+  api/payment/config/    Public payment settings for the browser
+  api/history/           Signed-in scan history
+  api/stats/             Personal analytics and public activity counts
+  api/health/            Database and RPC health check
+  pulse/                 Main page
+components/              Dashboard, results, safety summary, heart map, analytics
+lib/                     Scan analysis, payment verification, verdicts, RPC client
+db/                      SQL for tables Pulse adds
+docs/                    Security review and deployment checklist
 ```
 
 ## Requirements
 
-- Node.js 20 or newer.
-- pnpm 12.3.4, as declared by `packageManager`.
-- A Privy application for wallet login.
-- Arc Mainnet JSON-RPC; the official public endpoint is the default, with an optional `ARC_RPC_URL` override.
+- Node.js 20 or newer
+- pnpm (version pinned by `packageManager`)
+- A Privy app (wallet connection)
+- A Postgres database (Neon works well)
+- An Arc RPC (the public endpoint works; a dedicated provider is recommended for traffic)
 
 ## Local development
 
-Install dependencies:
-
 ```bash
 pnpm install
-```
-
-Create a local environment file from the template:
-
-```bash
-cp .env.example .env.local
-```
-
-Start the development server:
-
-```bash
+cp .env.example .env.local   # then fill in the values
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The scanner is available at `/pulse/index.html`.
-
-Build and run the production bundle locally:
+Open http://localhost:3000. Build and run production locally:
 
 ```bash
 pnpm build
@@ -92,119 +84,56 @@ pnpm start
 
 ## Environment variables
 
-The project reads environment variables through Next.js and server-side validation. Never commit real secrets.
+Never commit real values. Everything below is read on the server unless noted.
 
-### Required for Privy
+Required:
+- `NEXT_PUBLIC_PRIVY_APP_ID`: Privy app ID (safe for the browser).
+- `PRIVY_APP_SECRET`: Privy secret (server only).
+- `DATABASE_URL`: pooled Postgres connection string.
+- `PULSE_RECEIVING_ADDRESS`: wallet that receives deep-scan payments. You must control it.
 
-```env
-NEXT_PUBLIC_PRIVY_APP_ID=your_privy_app_id
-PRIVY_APP_SECRET=your_server_only_privy_secret
+Deep-scan payments (Arc Mainnet moves real USDC; the code defaults to Arc Testnet if these are unset):
+- `PULSE_PAYMENT_CHAIN_ID`, `PULSE_PAYMENT_CHAIN_NAME`
+- `PULSE_PAYMENT_RPC_URL`: **sent to every visitor's browser**, so use a public URL with no API key.
+- `PULSE_PAYMENT_EXPLORER_URL`, `PULSE_PAYMENT_USDC_ADDRESS`
+- `PULSE_DEEP_SCAN_PRICE_USDC`: optional, defaults to `0.001`.
+
+RPC (optional):
+- `ARC_RPC_URL`: dedicated provider for general reads. Contains a key, so it stays server-side.
+- `ARC_RPC_MIN_GAP_MS`: spacing between RPC requests. Defaults to 230 for the public RPC; use about 20 with a dedicated provider.
+- `ARC_LOGS_RPC_URL`: RPC used only for `eth_getLogs`. Defaults to the public Arc RPC, because some free plans limit log reads to a few blocks.
+
+## Database setup
+
+The scan history and rate-limit tables must exist. Run the SQL files in `db/` once against your database:
+
+```bash
+psql "$DATABASE_URL" -f db/pulse_payments.sql
+psql "$DATABASE_URL" -f db/pulse_scan_events.sql
 ```
 
-`NEXT_PUBLIC_PRIVY_APP_ID` is safe to expose to the browser. `PRIVY_APP_SECRET` must remain server-only and should never be placed in client code, logs, or the repository.
+## Payments and security
 
-### Optional Arc Mainnet RPC override
+- A payment unlocks exactly one scan, and only for the wallet that paid. The paying wallet signs a message naming the payment, the scan type, the target address and the network.
+- The server never trusts the browser for price, recipient, network or sender. It reads the onchain receipt and checks the USDC transfer itself.
+- If a scan fails after payment, the payment is released for a retry. Delivered results are stored so the payer can fetch them again.
+- Routes are rate limited per client IP. Run behind a trusted proxy such as Vercel.
 
-```env
-ARC_RPC_URL=https://rpc.mainnet.arc.io
-```
-
-If omitted, server routes use the official Arc Mainnet public RPC. The shared network configuration verifies chain ID `5042`; an override must point to Arc Mainnet. RPC access stays server-side so validation, timeouts, logging, and rate limits remain centralized.
-
-### Optional application configuration
-
-```env
-PULSE_RECEIVING_ADDRESS=0x...
-```
-
-The receiving address is reserved for the payment phase. Payment creation and verification are not implemented in the current scanner milestone.
-
-## Wallet connection
-
-Privy is mounted at the root of the Next.js application through `app/privy-provider.tsx`.
-
-The provider exposes a deliberately small browser bridge to the legacy static Pulse interface:
-
-- `window.__pulsePrivyLogin()` opens the Privy login flow.
-- `window.__pulsePrivyLogout()` signs the user out through Privy.
-- `window.__pulsePrivyAccount` contains the current authenticated state and wallet address.
-- `pulse:privy-authenticated` synchronizes a successful login into the scanner.
-- `pulse:privy-signed-out` clears the scanner account state.
-
-The bridge exists because the main scanner is served as a static experience under `public/pulse`. Keep the bridge narrow; do not expose Privy secrets, server tokens, or unrestricted provider methods to the browser.
-
-Before release, configure the Privy dashboard with the deployed origins and enable only the login methods and chains the application actually supports.
-
-## Live contract scan API
-
-### `POST /api/scan/contract`
-
-Request:
-
-```json
-{
-  "address": "0x0000000000000000000000000000000000000000"
-}
-```
-
-The route verifies the Privy wallet and applies rate limits, then checks the configured RPC chain ID and queries `eth_getCode` and `eth_getBalance` at the latest state. Responses include the address, Arc Mainnet label, runtime bytecode size, native USDC balance, and a limited finding. The contract endpoint does not fetch a block number or transaction history.
-
-A successful RPC read is not a complete security audit. It does not prove source correctness, ownership safety, upgradeability safety, liquidity, sellability, or economic safety. Those checks should be added as separate, explicitly labeled analysis stages.
-
-## Payment boundary
-
-The scanner currently does not charge users. The payment UI and wallet connection are separate from payment settlement by design.
-
-The planned Arc Studio integration should:
-
-1. Ask the connected Privy wallet to approve the exact USDC amount and recipient.
-2. Submit the transaction on the configured Arc chain.
-3. Track the transaction until it reaches the required confirmation state.
-4. Verify the transaction server-side using the configured RPC and expected recipient, token contract, amount, sender, chain, and recipient scan request.
-5. Issue a short-lived scan authorization rather than trusting a client-provided transaction hash.
-6. Unlock the scan only after verification succeeds.
-
-Never unlock a paid scan from a browser-only success callback. Never trust an amount, recipient, chain ID, or sender supplied only by the client.
-
-## Security and production checklist
-
-Before public production launch:
-
-- Set exact Privy allowed origins for local, preview, and production environments.
-- Verify the configured endpoint reports Arc Mainnet chain ID `5042` in every deployment environment; choose a dedicated RPC provider and quotas for sustained traffic.
-- Exercise timeout, retry, wrong-chain, and unavailable-provider behavior.
-- Implement server-side payment verification before enabling scan charges.
-- Validate the current route limits against per-user and per-IP abuse scenarios.
-- Connect request-ID logs to external error monitoring without logging secrets or wallet credentials.
-- Validate and normalize every contract address server-side.
-- Keep all provider secrets in deployment environment variables.
-- Add automated tests for invalid addresses, RPC failures, unavailable contracts, and payment replay.
-- Keep Arc Mainnet and synthetic-demo labels explicit so sample visuals are never mistaken for live evidence.
-- Review Privy and Arc terms, quotas, and operational limits before launch.
+See `docs/security-review.md` for the review notes and open items, and `docs/deployment-checklist.md` before going live. An independent professional audit is recommended before handling meaningful volume. Mainnet transactions are irreversible: test on testnet first.
 
 ## Deployment
 
-This is a Next.js application and can be deployed to Vercel or another Node-compatible host.
+Any Node host for Next.js works (Vercel is the simplest). The app has server API routes, so a static-only host will not work.
 
-Set the environment variables in the deployment project, deploy, then verify:
-
-```text
-GET  /api/health
-POST /api/scan/contract
-GET  /pulse/index.html
-```
-
-Run the production build before deployment:
-
-```bash
-pnpm build
-```
-
-After deployment, test wallet login from the actual production origin. Embedded-wallet behavior inside an iframe or preview can differ from a top-level production page because browser cookie and popup policies vary by environment.
+1. Set the environment variables in the host.
+2. Add the deployed origin to your Privy app's allowed origins.
+3. Run the SQL in `db/` once.
+4. Deploy, then check `GET /api/health`.
+5. Make one small live deep scan and confirm the payment arrives at your receiving address.
 
 ## Contributing
 
-Keep changes focused and document behavior that affects wallet, RPC, payment, or security boundaries. For user-visible behavior, verify both desktop and narrow mobile layouts. For API changes, include validation and failure cases in the same change.
+Keep changes focused and document behavior that affects wallet, RPC, payment, or security boundaries. For user-visible behavior, verify both desktop and narrow mobile layouts.
 
 Use clear commit messages and avoid committing local environment files, build output, wallet credentials, RPC keys, or user data.
 

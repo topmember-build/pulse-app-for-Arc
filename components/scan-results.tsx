@@ -1,9 +1,14 @@
 'use client'
 
-import { ArrowUpRight, CheckCircle2, CircleAlert, ExternalLink, FileCode2, Info, ShieldAlert } from 'lucide-react'
+import { ArrowUpRight, Lock, CheckCircle2, CircleAlert, ExternalLink, FileCode2, Info, ShieldAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { HolderHeart } from '@/components/holder-heart'
+import { SafetySummary } from '@/components/safety-summary'
+import { contractVerdict, tokenVerdict } from '@/lib/verdict'
 import { PulseHeart } from '@/components/pulse-heart'
 import type { ContractScan, TokenScan } from '@/lib/schemas'
+
+type DeepResult = NonNullable<TokenScan['deep']>
 
 function shortAddress(value: string) {
   return `${value.slice(0, 8)}…${value.slice(-6)}`
@@ -22,8 +27,177 @@ function ExplorerLink({ address, type = 'address', children }: { address: string
   return <a href={href} target="_blank" rel="noreferrer" className="inline-flex max-w-full items-center gap-1.5 font-mono text-xs text-pulse-muted underline decoration-pulse-line underline-offset-4 transition hover:text-pulse-bone">{children}<ExternalLink aria-hidden="true" className="size-3 shrink-0" /></a>
 }
 
-function SnapshotNotice({ historical, historySaved }: { historical: boolean; historySaved: boolean }) {
+function DeepSection({ deep }: { deep?: DeepResult }) {
+  if (!deep) return null
+  const flags = [
+    deep.opcodes.delegatecall && 'DELEGATECALL',
+    deep.opcodes.selfdestruct && 'SELFDESTRUCT',
+    deep.opcodes.create && 'CREATE / CREATE2',
+  ].filter(Boolean) as string[]
+  return (
+    <section className="rounded-2xl border border-pulse-accent/30 bg-pulse-panel p-4 sm:p-6" aria-label="Deep scan findings">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pulse-accent">Deep scan</p>
+      <h3 className="mt-2 text-lg font-semibold tracking-tight">Bytecode controls</h3>
+      <p className="mt-1 text-xs leading-5 text-pulse-muted">{deep.scope}</p>
+      {deep.capabilities.length > 0 ? (
+        <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+          {deep.capabilities.map((item) => (
+            <li key={item.id} className="rounded-xl border border-pulse-line bg-pulse-bg/70 p-3">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <span aria-hidden="true" className={`size-1.5 rounded-full ${item.severity === 'review' ? 'bg-amber-300' : 'bg-sky-300'}`} />{item.label}
+                <span className="ml-auto text-[10px] font-semibold uppercase tracking-[0.14em] text-pulse-muted">{item.severity === 'review' ? 'Review' : 'Info'}</span>
+              </p>
+              <p className="mt-1.5 text-xs leading-5 text-pulse-muted">{item.detail}</p>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-4 rounded-xl border border-pulse-line bg-pulse-bg/70 p-3 text-sm text-pulse-muted">None of the checked function selectors appear in the bytecode.</p>
+      )}
+      <p className="mt-4 text-xs leading-5 text-pulse-muted">
+        {flags.length > 0 ? `Sensitive opcodes present: ${flags.join(', ')}. ` : 'No DELEGATECALL, SELFDESTRUCT or CREATE opcodes found. '}
+        A selector in the bytecode shows a function may exist. It does not show who can call it or that it is currently usable.
+      </p>
+    </section>
+  )
+}
+
+function pctLabel(value: number | null) {
+  return value === null ? 'n/a' : `${value.toFixed(2)}%`
+}
+
+function HoldersSection({ deep, onDeepScan }: { deep?: DeepResult; onDeepScan?: () => void }) {
+  if (!deep) {
+    return (
+      <section className="rounded-2xl border border-dashed border-pulse-line bg-pulse-panel/60 p-4 sm:p-6" aria-label="Whale wallets and clusters, deep scan only">
+        <p className="flex items-center gap-2 text-sm font-semibold"><Lock aria-hidden="true" className="size-4 text-pulse-accent" />Whale wallets and wallet clusters</p>
+        <p className="mt-2 max-w-2xl text-xs leading-5 text-pulse-muted">Deep scans draw an animated heart of the largest wallets by live balance, with each wallet flowing out as a blood cell, group wallets that were funded together, and flag bundles, same-block bursts and circular transfers. This section is included in deep scans only.</p>
+        {onDeepScan ? <Button type="button" variant="outline" size="sm" className="mt-4 min-h-11" onClick={onDeepScan}>Run a deep scan on this token</Button> : null}
+      </section>
+    )
+  }
+  const holders = deep.holders
+  if (!holders) {
+    return <div className="rounded-xl border border-amber-200/20 bg-amber-200/5 px-4 py-3 text-sm text-amber-100" role="status">Whale and cluster analysis could not be completed for this scan, so that section is empty. The rest of the deep scan is shown.</div>
+  }
+  return (
+    <section className="rounded-2xl border border-pulse-line bg-pulse-panel p-4 sm:p-6" aria-labelledby="holders-title">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pulse-accent">Deep scan</p>
+      <h3 id="holders-title" className="mt-2 text-lg font-semibold tracking-tight">Whale wallets and clusters</h3>
+      <p className="mt-1 text-xs leading-5 text-pulse-muted">{holders.basis}</p>
+      <div className="mt-4 grid grid-cols-3 gap-3 text-xs">
+        <div className="rounded-xl border border-pulse-line bg-pulse-bg/70 p-3"><p className="text-pulse-muted">Wallets seen</p><p className="mt-1 text-lg font-semibold tabular-nums">{number(holders.addressesSeen)}</p></div>
+        <div className="rounded-xl border border-pulse-line bg-pulse-bg/70 p-3"><p className="text-pulse-muted">Balances checked</p><p className="mt-1 text-lg font-semibold tabular-nums">{number(holders.walletsChecked)}</p></div>
+        <div className="rounded-xl border border-pulse-line bg-pulse-bg/70 p-3"><p className="text-pulse-muted">Top {holders.whales.length} hold</p><p className="mt-1 text-lg font-semibold tabular-nums">{pctLabel(holders.top10Pct)}</p></div>
+      </div>
+
+      <h4 className="mt-6 text-sm font-semibold">Holder heart</h4>
+      <HolderHeart holders={holders} />
+
+      <h4 className="mt-6 text-sm font-semibold">Largest wallets</h4>
+      {holders.whales.length === 0 ? <p className="mt-2 text-xs text-pulse-muted">No wallets with a balance were found among the transfers in this window.</p> : (
+        <ol className="mt-3 flex flex-col gap-2">
+          {holders.whales.map((whale, index) => (
+            <li key={whale.address} className="rounded-xl border border-pulse-line bg-pulse-bg/70 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="text-xs tabular-nums text-pulse-muted">#{index + 1}</span>
+                  <ExplorerLink address={whale.address}>{shortAddress(whale.address)}</ExplorerLink>
+                  {whale.isContract ? <span className="rounded-full bg-sky-300/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-sky-200">Contract</span> : null}
+                  {whale.clusterId ? <span className="rounded-full bg-pulse-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-pulse-accent">Cluster {whale.clusterId}</span> : null}
+                </div>
+                <p className="text-xs tabular-nums"><span className="font-semibold">{pctLabel(whale.pct)}</span><span className="ml-2 text-pulse-muted">{whale.balance}</span></p>
+              </div>
+              <div className="mt-2 h-1 overflow-hidden rounded-full bg-pulse-line"><div className="h-full rounded-full bg-pulse-accent" style={{ width: `${Math.min(100, whale.pct ?? 0)}%` }} /></div>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      <h4 className="mt-6 text-sm font-semibold">Linked wallet clusters</h4>
+      {holders.clusters.length === 0 ? <p className="mt-2 text-xs leading-5 text-pulse-muted">No groups of 3 or more wallets funded together within a few blocks were found in this window.</p> : (
+        <ul className="mt-3 grid gap-3 lg:grid-cols-2">
+          {holders.clusters.map((cluster) => (
+            <li key={cluster.id} className="rounded-xl border border-pulse-line bg-pulse-bg/70 p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="rounded-full bg-pulse-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-pulse-accent">Cluster {cluster.id}</span>
+                <p className="text-xs tabular-nums"><span className="font-semibold">{pctLabel(cluster.combinedPct)}</span><span className="ml-2 text-pulse-muted">{cluster.combinedBalance}</span></p>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-pulse-muted">{cluster.evidence} Blocks {number(cluster.fromBlock)} to {number(cluster.toBlock)}.</p>
+              <p className="mt-1 text-xs text-pulse-muted">{cluster.memberCount} wallets{cluster.membersChecked < cluster.memberCount ? `, ${cluster.membersChecked} balances checked` : ''}.</p>
+              <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                {cluster.members.slice(0, 6).map((member) => <li key={member}><ExplorerLink address={member}>{shortAddress(member)}</ExplorerLink></li>)}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-5 text-xs leading-5 text-pulse-muted">Clusters are a heuristic: wallets paid together by one sender or one mint inside a few blocks. That is a pattern worth reviewing, not proof that one person controls them. Exchanges, pools, bridges and airdrop contracts also show up as large or linked wallets.</p>
+    </section>
+  )
+}
+
+function LinkageSection({ result }: { result: TokenScan }) {
+  if (!result.deep) return null
+  const { clusters, bundleSignals, circularFlows } = result
+  const empty = clusters.length + bundleSignals.length + circularFlows.length === 0
+  return (
+    <section className="rounded-2xl border border-pulse-line bg-pulse-panel p-4 sm:p-6" aria-labelledby="linkage-title">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pulse-accent">Deep scan</p>
+      <h3 id="linkage-title" className="mt-2 text-lg font-semibold tracking-tight">Bundles and transfer patterns</h3>
+      {empty ? <p className="mt-3 text-xs leading-5 text-pulse-muted">No shared-source distributions, same-block bursts or circular transfers were detected in this window.</p> : (
+        <div className="mt-4 flex flex-col gap-4">
+          {clusters.length > 0 ? (
+            <div>
+              <h4 className="text-sm font-semibold">Shared-source distributions</h4>
+              <ul className="mt-2 grid gap-3 lg:grid-cols-2">
+                {clusters.map((cluster) => (
+                  <li key={cluster.id} className="rounded-xl border border-pulse-line bg-pulse-bg/70 p-3.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <ExplorerLink address={cluster.sourceAddress}>{shortAddress(cluster.sourceAddress)}</ExplorerLink>
+                      <span className="text-xs tabular-nums text-pulse-muted">{cluster.recipientCount} wallets · {number(cluster.transactionCount)} tx</span>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-pulse-muted">Blocks {number(cluster.firstBlock)} to {number(cluster.lastBlock)}. {cluster.matchingAmountPct.toFixed(0)}% of amounts match closely{cluster.grossSupplySharePct !== null ? `, ${cluster.grossSupplySharePct.toFixed(2)}% of supply moved` : ''}.</p>
+                    <ul className="mt-2 list-disc pl-4 text-xs leading-5 text-pulse-muted">{cluster.evidence.map((line) => <li key={line}>{line}</li>)}</ul>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {bundleSignals.length > 0 ? (
+            <div>
+              <h4 className="text-sm font-semibold">Bundles and bursts</h4>
+              <ul className="mt-2 flex flex-col gap-2">
+                {bundleSignals.map((signal) => (
+                  <li key={signal.id} className="rounded-xl border border-pulse-line bg-pulse-bg/70 p-3 text-xs leading-5 text-pulse-muted">
+                    <span className="font-semibold text-pulse-bone">{signal.kind === 'single_transaction_fanout' ? 'Single-transaction fan-out' : 'Same-block burst'}</span> at block {number(signal.blockNumber)} from <ExplorerLink address={signal.sourceAddress}>{shortAddress(signal.sourceAddress)}</ExplorerLink> to {signal.recipientCount} wallets. {signal.evidence}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {circularFlows.length > 0 ? (
+            <div>
+              <h4 className="text-sm font-semibold">Circular flows</h4>
+              <ul className="mt-2 flex flex-col gap-2">
+                {circularFlows.map((flow) => (
+                  <li key={flow.id} className="rounded-xl border border-pulse-line bg-pulse-bg/70 p-3 text-xs leading-5 text-pulse-muted">
+                    {flow.addresses.map((item) => shortAddress(item)).join(' → ')} → back. {flow.evidence}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      )}
+      <p className="mt-4 text-xs leading-5 text-pulse-muted">These are movement patterns, not proof of common ownership.</p>
+    </section>
+  )
+}
+
+function SnapshotNotice({ historical, historySaved, anonymous }: { historical: boolean; historySaved: boolean; anonymous?: boolean }) {
   if (historical) return <div className="rounded-xl border border-sky-200/15 bg-sky-200/5 px-4 py-3 text-sm text-sky-100" role="status">Saved evidence snapshot. Values describe the chain state at the scan time, not a refreshed live read.</div>
+  if (anonymous) return <div className="rounded-xl border border-pulse-line bg-pulse-bg/70 px-4 py-3 text-sm text-pulse-muted" role="status">This scan was not saved. Connect a wallet to keep a history of your scans.</div>
   if (!historySaved) return <div className="rounded-xl border border-amber-200/20 bg-amber-200/5 px-4 py-3 text-sm text-amber-100" role="status">The live result was returned, but the history database did not save this scan.</div>
   return null
 }
@@ -44,13 +218,17 @@ const severityClass = {
   info: 'border-sky-200/15 bg-sky-200/5 text-sky-100',
 }
 
-export function TokenScanResults({ result, historical, onScanContract }: { result: TokenScan; historical: boolean; onScanContract: () => void }) {
+export function TokenScanResults({ result, historical, onScanContract, onDeepScan }: { result: TokenScan; historical: boolean; onScanContract: () => void; onDeepScan?: () => void }) {
   const { token, network, coverage, metrics, assessment, transfers, clusters, bundleSignals, circularFlows, scannedAt, historySaved } = result
   const symbolLabel = token.symbol ?? 'Symbol not returned'
 
   return (
     <section className="flex flex-col gap-5" aria-labelledby="token-result-title">
-      <SnapshotNotice historical={historical} historySaved={historySaved} />
+      <SafetySummary verdict={tokenVerdict(result)} subject={token.symbol ?? token.name ?? 'Token'} onDeepScan={historical ? undefined : onDeepScan} />
+      <SnapshotNotice historical={historical} historySaved={historySaved} anonymous={result.anonymous} />
+      <HoldersSection deep={result.deep} onDeepScan={historical ? undefined : onDeepScan} />
+      <LinkageSection result={result} />
+      <DeepSection deep={result.deep} />
       <div className="overflow-hidden rounded-2xl border border-pulse-line bg-pulse-panel">
         <div className="border-b border-pulse-line p-4 sm:p-6">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
@@ -150,7 +328,7 @@ function Property({ label, value, detail }: { label: string; value: React.ReactN
   )
 }
 
-export function ContractScanResults({ result, historical, onScanToken }: { result: ContractScan; historical: boolean; onScanToken: () => void }) {
+export function ContractScanResults({ result, historical, onScanToken, onDeepScan }: { result: ContractScan; historical: boolean; onScanToken: () => void; onDeepScan?: () => void }) {
   const contract = result.contract
   const owner = contract.ownerStatus === 'active'
     ? <ExplorerLink address={contract.ownerAddress!}>{shortAddress(contract.ownerAddress!)}</ExplorerLink>
@@ -164,7 +342,9 @@ export function ContractScanResults({ result, historical, onScanToken }: { resul
 
   return (
     <section className="flex flex-col gap-5" aria-labelledby="contract-result-title">
-      <SnapshotNotice historical={historical} historySaved={result.historySaved} />
+      <SafetySummary verdict={contractVerdict(result)} subject={contract.token.symbol ?? contract.token.name ?? 'Contract'} onDeepScan={historical ? undefined : onDeepScan} />
+      <SnapshotNotice historical={historical} historySaved={result.historySaved} anonymous={result.anonymous} />
+      <DeepSection deep={result.deep} />
       <div className="rounded-2xl border border-pulse-line bg-pulse-panel">
         <div className="flex flex-col justify-between gap-4 border-b border-pulse-line p-4 sm:flex-row sm:items-start sm:p-6">
           <div className="min-w-0">
