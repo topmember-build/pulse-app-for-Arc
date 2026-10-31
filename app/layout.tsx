@@ -12,6 +12,7 @@ export const metadata: Metadata = {
   title: 'Pulse for Arc Mainnet — Live Token and Contract Analysis',
   description: 'Scan live Arc Mainnet transfer events and contract properties with authenticated, database-backed history and transparent evidence coverage.',
   applicationName: 'Pulse for Arc',
+  icons: { icon: [{ url: '/icon.svg', type: 'image/svg+xml' }, { url: '/icon-dark-32x32.png', sizes: '32x32', type: 'image/png' }], apple: '/apple-icon.png' },
   robots: { index: true, follow: true },
 }
 
