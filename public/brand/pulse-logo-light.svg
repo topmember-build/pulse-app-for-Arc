@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Pulse for Arc logo">
+  <rect width="512" height="512" rx="116" fill="#faf5ee"/>
+  <path d="M256 428 C150 344 86 282 86 204 C86 150 128 110 178 110 C212 110 242 128 256 158 C270 128 300 110 334 110 C384 110 426 150 426 204 C426 282 362 344 256 428 Z" fill="#c9301c" fill-opacity="0.14"/>
+  <path d="M256 428 C150 344 86 282 86 204 C86 150 128 110 178 110 C212 110 242 128 256 158 C270 128 300 110 334 110 C384 110 426 150 426 204 C426 282 362 344 256 428 Z" fill="none" stroke="#c9301c" stroke-width="28" stroke-linejoin="round"/>
+  <polyline points="60,266 172,266 204,216 238,340 282,148 322,292 346,266 452,266" fill="none" stroke="#24121f" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="452" cy="266" r="15" fill="#f5b83d"/>
+</svg>
