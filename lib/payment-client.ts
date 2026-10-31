@@ -1,4 +1,5 @@
 import type { ConnectedWallet } from '@privy-io/react-auth'
+import { encodeFunctionData, toHex } from 'viem'
 
 export type PublicPaymentConfig = {
   enabled: boolean
@@ -8,7 +9,9 @@ export type PublicPaymentConfig = {
   explorerUrl: string
   usdc: string
   receiver: string | null
+  contract: string | null
   priceUnits: string
+  priceNativeUnits: string
   priceDisplay: string
 }
 
@@ -26,15 +29,29 @@ function encodeTransfer(receiver: string, units: bigint) {
 export class PaymentRejectedError extends Error {}
 
 // Sends the exact deep-scan price in USDC (ERC-20 view, 6 decimals) from the connected wallet.
-export async function sendUsdcPayment(wallet: ConnectedWallet, config: PublicPaymentConfig): Promise<string> {
+const PAY_ABI = [{
+  type: 'function',
+  name: 'pay',
+  stateMutability: 'payable',
+  inputs: [{ name: 'scanType', type: 'uint8' }, { name: 'target', type: 'address' }],
+  outputs: [],
+}] as const
+
+export async function sendUsdcPayment(wallet: ConnectedWallet, config: PublicPaymentConfig, scan: { scanType: 'token' | 'contract'; target: string }): Promise<string> {
   if (!config.enabled || !config.receiver) throw new Error('payment_unavailable')
   try {
     await wallet.switchChain(config.chainId)
     const provider = await wallet.getEthereumProvider()
-    const hash = await provider.request({
-      method: 'eth_sendTransaction',
-      params: [{ from: wallet.address, to: config.usdc, data: encodeTransfer(config.receiver, BigInt(config.priceUnits)) }],
-    })
+    // With the payment contract: one transaction that carries the price as native USDC and names the scan.
+    const transaction = config.contract
+      ? {
+          from: wallet.address,
+          to: config.contract,
+          value: toHex(BigInt(config.priceNativeUnits)),
+          data: encodeFunctionData({ abi: PAY_ABI, functionName: 'pay', args: [scan.scanType === 'token' ? 0 : 1, scan.target as `0x${string}`] }),
+        }
+      : { from: wallet.address, to: config.usdc, data: encodeTransfer(config.receiver, BigInt(config.priceUnits)) }
+    const hash = await provider.request({ method: 'eth_sendTransaction', params: [transaction] })
     if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error('payment_unavailable')
     return hash
   } catch (error) {

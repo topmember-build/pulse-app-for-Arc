@@ -96,6 +96,7 @@ Deep-scan payments (Arc Mainnet moves real USDC; the code defaults to Arc Testne
 - `PULSE_PAYMENT_CHAIN_ID`, `PULSE_PAYMENT_CHAIN_NAME`
 - `PULSE_PAYMENT_RPC_URL`: **sent to every visitor's browser**, so use a public URL with no API key.
 - `PULSE_PAYMENT_EXPLORER_URL`, `PULSE_PAYMENT_USDC_ADDRESS`
+- `PULSE_PAYMENT_CONTRACT` (optional): address of the deployed `PulseScanPayments` contract. When set, a deep scan is paid in one transaction through the contract, which forwards the payment to the receiving wallet and records which scan it was for. Leave empty to use a plain USDC transfer.
 - `PULSE_DEEP_SCAN_PRICE_USDC`: optional, defaults to `0.001`.
 
 RPC (optional):

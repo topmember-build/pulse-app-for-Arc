@@ -14,3 +14,13 @@ __v0_jsx-dev-runtime.ts
 node_modules
 .next/
 .DS_Store
+# Foundry / contracts build output and local tooling
+contracts/out/
+contracts/cache/
+contracts/contract-metadata/
+contracts/test-integration/
+cache/
+foundry.lock
+lib/forge-std/
+tsconfig.tsbuildinfo
+bun.lock

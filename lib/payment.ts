@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto'
-import { recoverMessageAddress } from 'viem'
+import { recoverMessageAddress, toEventSelector } from 'viem'
 import { and, eq, or, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { pulsePayments } from '@/lib/db-schema'
 import { getPaymentConfig, type PaymentConfig } from '@/lib/payment-config'
 import { paymentMessage } from '@/lib/payment-message'
 
+// ScanPaid(address indexed payer, address indexed target, uint8 scanType, uint256 amount) from PulseScanPayments.
+const SCAN_PAID_TOPIC = toEventSelector('ScanPaid(address,address,uint8,uint256)')
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 
 export type PaymentErrorCode =
@@ -52,7 +54,7 @@ const topicAddress = (topic: string | undefined) => (topic && /^0x[0-9a-f]{64}$/
 
 // Reads the transaction receipt from the payment chain and finds who paid at least the
 // configured price of USDC to the configured receiver. The payer is whoever sent the tokens.
-export async function verifyPaymentOnchain(config: PaymentConfig, txHash: string) {
+export async function verifyPaymentOnchain(config: PaymentConfig, txHash: string, scan: { scanType: 'token' | 'contract'; target: string }) {
   if (!config.enabled || !config.receiver) return fail('payment_unavailable')
   try {
     const chainId = Number.parseInt(await paymentRpc<string>(config, 'eth_chainId', []), 16)
@@ -61,6 +63,26 @@ export async function verifyPaymentOnchain(config: PaymentConfig, txHash: string
     const receipt = await paymentRpc<Receipt | null>(config, 'eth_getTransactionReceipt', [txHash])
     if (!receipt || !receipt.blockNumber) return fail('payment_pending')
     if (receipt.status !== '0x1') return fail('payment_invalid')
+
+    // Contract mode: the payment contract's own event names the payer, the exact target and the
+    // scan type, so the payment is tied to one scan onchain.
+    if (config.contract) {
+      const needed = BigInt(config.priceNativeUnits)
+      const wantedType = scan.scanType === 'token' ? BigInt(0) : BigInt(1)
+      for (const log of receipt.logs ?? []) {
+        if (log.address?.toLowerCase() !== config.contract) continue
+        const topics = log.topics ?? []
+        if (topics[0]?.toLowerCase() !== SCAN_PAID_TOPIC.toLowerCase() || topics.length !== 3) continue
+        const payer = topicAddress(topics[1])
+        const target = topicAddress(topics[2])
+        if (!payer || target !== scan.target.toLowerCase()) continue
+        if (!log.data || !/^0x[0-9a-f]{128}$/i.test(log.data)) continue
+        const type = BigInt(`0x${log.data.slice(2, 66)}`)
+        const amount = BigInt(`0x${log.data.slice(66, 130)}`)
+        if (type === wantedType && amount >= needed) return { ok: true as const, payer, amountUnits: (amount / BigInt(1_000_000_000_000)).toString() }
+      }
+      return fail('payment_invalid')
+    }
 
     const price = BigInt(config.priceUnits)
     const paidBy = new Map<string, bigint>()
@@ -131,7 +153,7 @@ export async function claimPayment(input: {
     return claimed ? { ok: true as const, replay: undefined } : fail('payment_in_progress')
   }
 
-  const verification = await verifyPaymentOnchain(config, txHash)
+  const verification = await verifyPaymentOnchain(config, txHash, { scanType: input.scanType, target: input.targetAddress })
   if (!verification.ok) return verification
   if (!(await signatureMatches(proof, verification.payer))) return fail('payment_signature_invalid')
 

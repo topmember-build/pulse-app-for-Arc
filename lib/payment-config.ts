@@ -11,7 +11,11 @@ export type PaymentConfig = {
   explorerUrl: string
   usdc: string
   receiver: string | null
+  // When set, deep scans are paid through the PulseScanPayments contract (native USDC, one transaction).
+  contract: string | null
   priceUnits: string
+  // Price in the 18-decimal native USDC view (what the contract's msg.value uses).
+  priceNativeUnits: string
   priceDisplay: string
 }
 
@@ -35,6 +39,8 @@ export function getPaymentConfig(): PaymentConfig {
   const usdcRaw = process.env.PULSE_PAYMENT_USDC_ADDRESS?.trim() || '0x3600000000000000000000000000000000000000'
   const price = parseUsdcUnits(process.env.PULSE_DEEP_SCAN_PRICE_USDC ?? '0.001')
   const usdc = ADDRESS.test(usdcRaw) ? usdcRaw.toLowerCase() : null
+  const contractRaw = process.env.PULSE_PAYMENT_CONTRACT?.trim() ?? ''
+  const contract = ADDRESS.test(contractRaw) && contractRaw.toLowerCase() !== ZERO_ADDRESS ? contractRaw.toLowerCase() : null
 
   return {
     enabled: Boolean(receiver && usdc && price && price > BigInt(0) && Number.isSafeInteger(chainId) && chainId > 0),
@@ -44,7 +50,10 @@ export function getPaymentConfig(): PaymentConfig {
     explorerUrl: (process.env.PULSE_PAYMENT_EXPLORER_URL?.trim() || 'https://explorer.testnet.arc.io').replace(/\/+$/, ''),
     usdc: usdc ?? '0x3600000000000000000000000000000000000000',
     receiver,
+    contract,
     priceUnits: (price ?? BigInt(0)).toString(),
+    // 6-decimal ERC-20 units to 18-decimal native units (x 10^12).
+    priceNativeUnits: ((price ?? BigInt(0)) * BigInt(1_000_000_000_000)).toString(),
     priceDisplay: formatUsdcUnits(price ?? BigInt(0)),
   }
 }
