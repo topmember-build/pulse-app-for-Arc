@@ -134,6 +134,48 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+
+.light {
+  color-scheme: light;
+  --pulse-bg: #faf5ee;
+  --pulse-panel: #ffffff;
+  --pulse-line: rgb(36 18 31 / 15%);
+  --pulse-bone: #24121f;
+  --pulse-muted: rgb(36 18 31 / 66%);
+  --pulse-accent: #c9301c;
+  --pulse-venous: #1a6f9e;
+  --pulse-amber: #9a5808;
+  --background: var(--pulse-bg);
+  --foreground: var(--pulse-bone);
+  --card: var(--pulse-panel);
+  --card-foreground: var(--pulse-bone);
+  --popover: var(--pulse-panel);
+  --popover-foreground: var(--pulse-bone);
+  --primary: var(--pulse-accent);
+  --primary-foreground: #fff8f0;
+  --secondary: oklch(0.95 0.01 70);
+  --secondary-foreground: var(--pulse-bone);
+  --muted: oklch(0.95 0.01 70);
+  --muted-foreground: var(--pulse-muted);
+  --accent: oklch(0.95 0.01 70);
+  --accent-foreground: var(--pulse-bone);
+  --border: var(--pulse-line);
+  --input: var(--pulse-line);
+  --ring: var(--pulse-accent);
+  /* Status colours: the pale shades used on the dark theme become dark, readable shades on light. */
+  --color-amber-100: #6b3d05;
+  --color-amber-200: #7c4a03;
+  --color-amber-300: #b45309;
+  --color-rose-100: #7f1d1d;
+  --color-rose-200: #9f1239;
+  --color-rose-300: #be123c;
+  --color-sky-100: #0c4a6e;
+  --color-sky-200: #075985;
+  --color-sky-300: #0369a1;
+  --color-emerald-100: #064e3b;
+  --color-emerald-300: #047857;
+}
+
 @media (prefers-color-scheme: dark) {
   :root:not(.light):not(.dark) {
     color-scheme: dark;

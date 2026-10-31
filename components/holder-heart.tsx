@@ -212,7 +212,8 @@ export function HolderHeart({ holders }: { holders: Holders }) {
             ctx.beginPath()
             ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
             ctx.lineWidth = i === focus ? 2.5 : cell.cluster !== null ? 1.8 : 1
-            ctx.strokeStyle = i === focus ? '#f1eee7' : cell.cluster !== null ? AMBER : 'rgba(40,6,14,0.8)'
+            const light = document.documentElement.classList.contains('light')
+            ctx.strokeStyle = i === focus ? (light ? '#24121f' : '#f1eee7') : cell.cluster !== null ? (light ? '#b97a0b' : AMBER) : 'rgba(40,6,14,0.8)'
             ctx.stroke()
             if (r >= 16 && bubble.pct !== null) {
               ctx.fillStyle = '#f9efe9'

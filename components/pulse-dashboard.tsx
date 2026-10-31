@@ -21,6 +21,7 @@ import {
   Sparkles,
   Wallet,
 } from 'lucide-react'
+import { ThemeToggle } from '@/components/theme-toggle'
 import { Button } from '@/components/ui/button'
 import {
   contractScanRequestSchema,
@@ -413,6 +414,7 @@ function PulseDashboardContent({ health, healthLoading, healthError }: { health?
           </a>
           <div className="hidden items-center gap-5 md:flex"><HealthSummary health={health} loading={healthLoading} /></div>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             {authenticated && walletAddress ? (
               <div className="hidden items-center gap-1.5 rounded-lg border border-pulse-line bg-pulse-panel px-2 py-1 sm:flex">
                 {wallets.length > 1 ? (
